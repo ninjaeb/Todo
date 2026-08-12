@@ -44,6 +44,18 @@ app.post(
   })
 );
 
+// Search boards by title (must be registered before the /:boardId route below,
+// otherwise Express would treat "search" itself as a boardId).
+app.get(
+  '/api/boards/search',
+  asyncRoute(async (req, res) => {
+    const query = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!query) return res.json([]);
+    const results = await db.searchBoardsByTitle(query, 10);
+    res.json(results);
+  })
+);
+
 // Fetch a board (this is what the shared link loads)
 app.get('/api/boards/:boardId', requireBoard, (req, res) => {
   res.json(req.board);

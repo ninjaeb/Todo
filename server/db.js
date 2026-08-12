@@ -169,6 +169,14 @@ async function deleteNote(boardId, noteId) {
   return true;
 }
 
+async function searchBoardsByTitle(query, limit = 10) {
+  const [rows] = await pool.query(
+    'SELECT id, title, updated_at FROM boards WHERE title LIKE ? ORDER BY updated_at DESC LIMIT ?',
+    [`%${query}%`, limit]
+  );
+  return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at }));
+}
+
 module.exports = {
   initSchema,
   createBoard,
@@ -177,4 +185,5 @@ module.exports = {
   createNote,
   updateNote,
   deleteNote,
+  searchBoardsByTitle,
 };
