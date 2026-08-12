@@ -300,8 +300,8 @@ button:hover { filter: brightness(1.1); }
 
 .notes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 18px;
   align-items: start;
 }
 
@@ -315,10 +315,10 @@ button:hover { filter: brightness(1.1); }
   background: var(--note-default-bg);
   border: 1px solid var(--note-default-border);
   border-radius: 10px;
-  padding: 14px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
 }
 .note :is(input, textarea, button) {
@@ -338,7 +338,7 @@ button:hover { filter: brightness(1.1); }
   background: transparent;
   border: none;
   color: var(--text);
-  font-size: 16px;
+  font-size: 19px;
   font-weight: 600;
   font-family: inherit;
   padding: 4px 2px;
@@ -397,13 +397,13 @@ button:hover { filter: brightness(1.1); }
   border: none;
   color: var(--text);
   font-family: inherit;
-  font-size: 15.5px;
+  font-size: 17px;
   padding: 4px 2px;
   resize: none;
   overflow: hidden;
   overflow-wrap: break-word;
   white-space: pre-wrap;
-  line-height: 1.4;
+  line-height: 1.45;
 }
 .note-item .item-text:focus { outline: none; }
 .note-item.checked .item-text {

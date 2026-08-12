@@ -82,6 +82,11 @@ function rowToBoard(boardRow, noteRows) {
   return {
     id: boardRow.id,
     title: boardRow.title,
+    // Whether *some* browser holds this board's owner token — never the
+    // token itself. Boards created before ownership existed have an empty
+    // owner_token, so hasOwner is false and anyone can still delete them,
+    // preserving the old "link = full access" behavior for those boards.
+    hasOwner: !!boardRow.owner_token,
     createdAt: boardRow.created_at,
     updatedAt: boardRow.updated_at,
     notes: noteRows.map(rowToNote),
@@ -113,16 +118,16 @@ async function createBoard(id, title, ownerToken) {
   return { id, title, ownerToken, createdAt: now, updatedAt: now, notes: [] };
 }
 
-// Deletes a board only if the given token matches its owner_token (set once at
-// creation and known only to the browser that created it). Returns false for a
-// missing board OR a token mismatch, so callers can't distinguish "wrong token"
-// from "board doesn't exist" and probe for valid board IDs.
+// Deletes a board if the given token matches its owner_token, OR if the board
+// has no owner_token at all (a board created before ownership existed, back
+// when the share link alone granted full access — those stay deletable by
+// anyone with the link rather than becoming permanently stuck). Returns false
+// for a missing board or a real token mismatch.
 async function deleteBoard(boardId, ownerToken) {
-  const [result] = await pool.query('DELETE FROM boards WHERE id = ? AND owner_token = ? AND owner_token != ?', [
-    boardId,
-    ownerToken || '',
-    '',
-  ]);
+  const [result] = await pool.query(
+    "DELETE FROM boards WHERE id = ? AND (owner_token = '' OR owner_token = ?)",
+    [boardId, ownerToken || '']
+  );
   return result.affectedRows > 0;
 }
 

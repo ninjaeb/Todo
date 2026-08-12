@@ -250,6 +250,7 @@ function wireNoteElement(el, note) {
   titleInput.addEventListener('input', () => {
     note.title = titleInput.value;
     autosizeTextarea(titleInput);
+    socket.emit('title:typing', { noteId: note.id, title: note.title });
     debouncedNotePut(note.id, { title: note.title });
   });
   titleInput.addEventListener('keydown', (e) => {
@@ -375,6 +376,7 @@ function buildItemRow(note, item, el) {
   text.addEventListener('input', () => {
     item.text = text.value;
     autosizeTextarea(text);
+    socket.emit('item:typing', { noteId: note.id, itemId: item.id, text: item.text });
     debouncedNotePut(note.id, { items: note.items });
   });
   text.addEventListener('keydown', (e) => {
@@ -432,6 +434,7 @@ function updateNoteElement(el, note) {
 
 function applyBoardUpdate(board) {
   state.board = board;
+  setUpDeleteBoardButton(board);
   renderAll();
 }
 
@@ -473,15 +476,24 @@ boardTitleInput.addEventListener('input', () => {
 wireThemeToggle('theme-toggle');
 
 const deleteBoardBtn = document.getElementById('delete-board-btn');
-const owned = MyBoards.get(boardId);
-if (owned) {
+
+// Runs once board data has actually loaded, since eligibility depends on
+// board.hasOwner (unknown until then) as well as local ownership tracking.
+function setUpDeleteBoardButton(board) {
+  const owned = MyBoards.get(boardId);
+  // Show the button if this browser holds the real owner token, or if the
+  // board predates the ownership feature entirely (hasOwner false) — those
+  // stay manageable by anyone with the link, same as before this shipped.
+  const canDelete = !!owned || board.hasOwner === false;
+  if (!canDelete) return;
+
   deleteBoardBtn.hidden = false;
   deleteBoardBtn.addEventListener('click', async () => {
     if (!confirm('Delete this entire board and everything on it? This cannot be undone.')) return;
     try {
       await api(`/api/boards/${boardId}`, {
         method: 'DELETE',
-        headers: { 'X-Owner-Token': owned.ownerToken },
+        headers: { 'X-Owner-Token': owned ? owned.ownerToken : '' },
       });
       MyBoards.remove(boardId);
       window.location.href = '/';
@@ -537,6 +549,45 @@ socket.on('connect', () => {
 
 socket.on('presence:count', (count) => {
   presenceEl.textContent = `👀 ${count}`;
+});
+
+function findNoteInstances(noteId) {
+  const els = [];
+  const gridEl = grid.querySelector(`[data-note-id="${noteId}"]`);
+  if (gridEl) els.push(gridEl);
+  if (state.openNoteId === noteId && state.detailEl) els.push(state.detailEl);
+  return els;
+}
+
+// Live keystroke previews from other viewers — ephemeral, never touches the
+// database (the debounced PUT each typist sends is what actually persists).
+socket.on('item:typing', ({ noteId, itemId, text }) => {
+  if (!state.board) return;
+  const note = state.board.notes.find((n) => n.id === noteId);
+  const item = note?.items.find((it) => it.id === itemId);
+  if (!item) return;
+  item.text = text;
+  findNoteInstances(noteId).forEach((noteEl) => {
+    const textarea = noteEl.querySelector(`.note-item[data-item-id="${itemId}"] .item-text`);
+    if (textarea && document.activeElement !== textarea) {
+      textarea.value = text;
+      autosizeTextarea(textarea);
+    }
+  });
+});
+
+socket.on('title:typing', ({ noteId, title }) => {
+  if (!state.board) return;
+  const note = state.board.notes.find((n) => n.id === noteId);
+  if (!note) return;
+  note.title = title;
+  findNoteInstances(noteId).forEach((noteEl) => {
+    const titleInput = noteEl.querySelector('.note-title');
+    if (titleInput && document.activeElement !== titleInput) {
+      titleInput.value = title;
+      autosizeTextarea(titleInput);
+    }
+  });
 });
 
 socket.on('note:created', (note) => {

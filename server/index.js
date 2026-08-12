@@ -13,7 +13,18 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use(
+  express.static(path.join(__dirname, '..', 'public'), {
+    // "no-cache" (not "no-store"): browsers may keep a copy, but must
+    // revalidate with the server (via ETag) before using it. This is what
+    // stops deployed JS/CSS fixes from getting stuck behind a stale cached
+    // copy — without it, some browsers/proxies keep serving old assets for
+    // a long time after a redeploy even on a hard refresh.
+    setHeaders: (res) => {
+      res.setHeader('Cache-Control', 'no-cache');
+    },
+  })
+);
 
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 
@@ -171,6 +182,23 @@ io.on('connection', (socket) => {
     if (!presence.has(boardId)) presence.set(boardId, new Set());
     presence.get(boardId).add(socket.id);
     io.to(boardId).emit('presence:count', presence.get(boardId).size);
+  });
+
+  // Ephemeral live-typing relay: mirrors keystrokes to other viewers of the
+  // same board instantly, ahead of the debounced PUT that actually persists
+  // them. Never touches the database — just a same-room broadcast.
+  socket.on('item:typing', (payload) => {
+    if (!joinedBoard) return;
+    if (!payload || typeof payload.noteId !== 'string' || typeof payload.itemId !== 'string' || typeof payload.text !== 'string') return;
+    if (payload.text.length > 20000) return;
+    socket.to(joinedBoard).emit('item:typing', payload);
+  });
+
+  socket.on('title:typing', (payload) => {
+    if (!joinedBoard) return;
+    if (!payload || typeof payload.noteId !== 'string' || typeof payload.title !== 'string') return;
+    if (payload.title.length > 2000) return;
+    socket.to(joinedBoard).emit('title:typing', payload);
   });
 
   socket.on('disconnect', () => {
