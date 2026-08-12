@@ -1,3 +1,4 @@
+require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const http = require('http');
@@ -16,40 +17,32 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 
-function now() {
-  return new Date().toISOString();
+function asyncRoute(handler) {
+  return (req, res, next) => handler(req, res, next).catch(next);
 }
 
-function emptyBoard(title) {
-  const id = nanoid(12);
-  return {
-    id,
-    title: title && title.trim() ? title.trim() : 'Untitled board',
-    createdAt: now(),
-    updatedAt: now(),
-    notes: [],
-  };
-}
-
-function findNote(board, noteId) {
-  return board.notes.find((n) => n.id === noteId);
-}
-
-function requireBoard(req, res, next) {
-  const board = db.getBoard(req.params.boardId);
-  if (!board) {
-    return res.status(404).json({ error: 'Board not found' });
+async function requireBoard(req, res, next) {
+  try {
+    const board = await db.getBoard(req.params.boardId);
+    if (!board) {
+      return res.status(404).json({ error: 'Board not found' });
+    }
+    req.board = board;
+    next();
+  } catch (err) {
+    next(err);
   }
-  req.board = board;
-  next();
 }
 
 // Create a new board
-app.post('/api/boards', (req, res) => {
-  const board = emptyBoard(req.body && req.body.title);
-  db.saveBoard(board);
-  res.status(201).json(board);
-});
+app.post(
+  '/api/boards',
+  asyncRoute(async (req, res) => {
+    const title = req.body && req.body.title && req.body.title.trim() ? req.body.title.trim() : 'Untitled board';
+    const board = await db.createBoard(nanoid(12), title);
+    res.status(201).json(board);
+  })
+);
 
 // Fetch a board (this is what the shared link loads)
 app.get('/api/boards/:boardId', requireBoard, (req, res) => {
@@ -57,75 +50,87 @@ app.get('/api/boards/:boardId', requireBoard, (req, res) => {
 });
 
 // Rename a board
-app.put('/api/boards/:boardId', requireBoard, (req, res) => {
-  const { title } = req.body || {};
-  if (typeof title === 'string' && title.trim()) {
-    req.board.title = title.trim();
-    req.board.updatedAt = now();
-    db.saveBoard(req.board);
-    io.to(req.board.id).emit('board:renamed', { title: req.board.title, updatedAt: req.board.updatedAt });
-  }
-  res.json(req.board);
-});
+app.put(
+  '/api/boards/:boardId',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const { title } = req.body || {};
+    if (typeof title === 'string' && title.trim()) {
+      const { title: newTitle, updatedAt } = await db.renameBoard(req.board.id, title.trim());
+      io.to(req.board.id).emit('board:renamed', { title: newTitle, updatedAt });
+      req.board.title = newTitle;
+      req.board.updatedAt = updatedAt;
+    }
+    res.json(req.board);
+  })
+);
 
 // Create a note (a checklist card) on a board
-app.post('/api/boards/:boardId/notes', requireBoard, (req, res) => {
-  const { title, color } = req.body || {};
-  const note = {
-    id: nanoid(10),
-    title: typeof title === 'string' ? title : '',
-    color: COLORS.includes(color) ? color : 'default',
-    items: [],
-    pinned: false,
-    position: req.board.notes.length,
-    createdAt: now(),
-    updatedAt: now(),
-  };
-  req.board.notes.unshift(note);
-  req.board.updatedAt = now();
-  db.saveBoard(req.board);
-  io.to(req.board.id).emit('note:created', note);
-  res.status(201).json(note);
-});
+app.post(
+  '/api/boards/:boardId/notes',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const { title, color } = req.body || {};
+    const note = await db.createNote(req.board.id, {
+      id: nanoid(10),
+      title: typeof title === 'string' ? title : '',
+      color: COLORS.includes(color) ? color : 'default',
+      items: [],
+      pinned: false,
+      position: req.board.notes.length,
+    });
+    io.to(req.board.id).emit('note:created', note);
+    res.status(201).json(note);
+  })
+);
 
 // Update a note (title, color, pinned, items, position)
-app.put('/api/boards/:boardId/notes/:noteId', requireBoard, (req, res) => {
-  const note = findNote(req.board, req.params.noteId);
-  if (!note) return res.status(404).json({ error: 'Note not found' });
+app.put(
+  '/api/boards/:boardId/notes/:noteId',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const { title, color, items, pinned, position } = req.body || {};
+    const fields = {};
+    if (typeof title === 'string') fields.title = title;
+    if (COLORS.includes(color)) fields.color = color;
+    if (typeof pinned === 'boolean') fields.pinned = pinned;
+    if (typeof position === 'number') fields.position = position;
+    if (Array.isArray(items)) {
+      fields.items = items.map((it) => ({
+        id: it.id || nanoid(8),
+        text: typeof it.text === 'string' ? it.text : '',
+        checked: !!it.checked,
+      }));
+    }
 
-  const { title, color, items, pinned, position } = req.body || {};
-  if (typeof title === 'string') note.title = title;
-  if (COLORS.includes(color)) note.color = color;
-  if (typeof pinned === 'boolean') note.pinned = pinned;
-  if (typeof position === 'number') note.position = position;
-  if (Array.isArray(items)) {
-    note.items = items.map((it) => ({
-      id: it.id || nanoid(8),
-      text: typeof it.text === 'string' ? it.text : '',
-      checked: !!it.checked,
-    }));
-  }
-  note.updatedAt = now();
-  req.board.updatedAt = now();
-  db.saveBoard(req.board);
-  io.to(req.board.id).emit('note:updated', note);
-  res.json(note);
-});
+    const note = await db.updateNote(req.board.id, req.params.noteId, fields);
+    if (!note) return res.status(404).json({ error: 'Note not found' });
+
+    io.to(req.board.id).emit('note:updated', note);
+    res.json(note);
+  })
+);
 
 // Delete a note
-app.delete('/api/boards/:boardId/notes/:noteId', requireBoard, (req, res) => {
-  const idx = req.board.notes.findIndex((n) => n.id === req.params.noteId);
-  if (idx === -1) return res.status(404).json({ error: 'Note not found' });
-  req.board.notes.splice(idx, 1);
-  req.board.updatedAt = now();
-  db.saveBoard(req.board);
-  io.to(req.board.id).emit('note:deleted', { id: req.params.noteId });
-  res.status(204).end();
-});
+app.delete(
+  '/api/boards/:boardId/notes/:noteId',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const deleted = await db.deleteNote(req.board.id, req.params.noteId);
+    if (!deleted) return res.status(404).json({ error: 'Note not found' });
+    io.to(req.board.id).emit('note:deleted', { id: req.params.noteId });
+    res.status(204).end();
+  })
+);
 
 // Fallback: send the board page for any /board/:id deep link
 app.get('/board/:boardId', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'board.html'));
+});
+
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
 });
 
 const presence = new Map(); // boardId -> Set of socket ids
@@ -150,6 +155,14 @@ io.on('connection', (socket) => {
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`Keep-style todo app running at http://localhost:${PORT}`);
+async function start() {
+  await db.initSchema();
+  server.listen(PORT, () => {
+    console.log(`Keep-style todo app running at http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
