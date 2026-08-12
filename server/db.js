@@ -11,15 +11,25 @@ const {
 let pool;
 
 async function initSchema() {
-  // Connect without selecting a database first, so we can create it if missing.
-  const bootstrap = await mysql.createConnection({
-    host: DB_HOST,
-    port: Number(DB_PORT),
-    user: DB_USER,
-    password: DB_PASSWORD,
-  });
-  await bootstrap.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4`);
-  await bootstrap.end();
+  // Try to create the database if it doesn't exist yet. Managed hosts (e.g. cPanel)
+  // usually grant DB users privileges scoped to a database they pre-created via their
+  // control panel UI, without CREATE DATABASE rights — so a denial here is expected
+  // and we just proceed assuming DB_NAME already exists.
+  try {
+    const bootstrap = await mysql.createConnection({
+      host: DB_HOST,
+      port: Number(DB_PORT),
+      user: DB_USER,
+      password: DB_PASSWORD,
+    });
+    await bootstrap.query(`CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4`);
+    await bootstrap.end();
+  } catch (err) {
+    console.warn(
+      `Skipping automatic database creation (${err.code || err.message}). ` +
+        `Assuming database "${DB_NAME}" already exists.`
+    );
+  }
 
   pool = mysql.createPool({
     host: DB_HOST,
