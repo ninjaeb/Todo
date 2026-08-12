@@ -422,6 +422,12 @@ function updateNoteElement(el, note) {
   const completedItems = note.items.filter((item) => item.checked);
   const expanded = el.dataset.completedExpanded === 'true';
 
+  // Un-hide BEFORE building/autosizing rows inside it — same bug class as the
+  // detail modal: a textarea inside a display:none ancestor always reports
+  // scrollHeight 0, so autosizing it while still hidden leaves it looking
+  // empty even though its value is set correctly.
+  completedContainer.hidden = !expanded;
+
   syncItemsContainer(itemsContainer, activeItems, note, el);
   if (expanded) {
     syncItemsContainer(completedContainer, completedItems, note, el);
@@ -432,7 +438,6 @@ function updateNoteElement(el, note) {
   completedToggle.hidden = completedItems.length === 0;
   completedToggle.classList.toggle('expanded', expanded);
   completedToggle.querySelector('.completed-count').textContent = `${completedItems.length} completed item${completedItems.length === 1 ? '' : 's'}`;
-  completedContainer.hidden = !expanded;
 }
 
 function applyBoardUpdate(board) {
