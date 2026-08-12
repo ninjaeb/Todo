@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Todo Keep</title>
+<link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="home">
+    <div class="home-card">
+      <h1>📝 Todo Keep</h1>
+      <p class="subtitle">Create a shareable todo board and collaborate with anyone who has the link — no sign up needed.</p>
+      <form id="create-form">
+        <input id="board-title" type="text" placeholder="Board name (e.g. Team Sprint, Grocery List)" autocomplete="off" />
+        <button type="submit">Create board</button>
+      </form>
+
+      <div class="divider"><span>or</span></div>
+
+      <form id="join-form">
+        <input id="board-link" type="text" placeholder="Paste a board link or ID to open it" autocomplete="off" />
+        <button type="submit" class="secondary">Open board</button>
+      </form>
+    </div>
+  </div>
+  <script src="/js/home.js"></script>
+</body>
+</html>

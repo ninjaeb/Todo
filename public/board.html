@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Board · Todo Keep</title>
+<link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="/" class="logo" title="Home">📝</a>
+      <input id="board-title-input" class="board-title-input" placeholder="Untitled board" />
+    </div>
+    <div class="topbar-right">
+      <span id="presence" class="presence" title="People currently viewing this board">👀 1</span>
+      <button id="share-btn" class="share-btn">Share</button>
+    </div>
+  </header>
+
+  <main class="board-main">
+    <form id="new-note-form" class="new-note">
+      <input id="new-note-title" type="text" placeholder="Take a note…" autocomplete="off" />
+      <button type="submit">+ Add list</button>
+    </form>
+
+    <div id="notes-grid" class="notes-grid"></div>
+    <p id="empty-state" class="empty-state" hidden>No lists yet. Add your first todo list above.</p>
+  </main>
+
+  <div id="share-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h2>Share this board</h2>
+      <p>Anyone with this link can view and edit this board in real time — great for collaborating with teammates, roommates, or family.</p>
+      <div class="share-link-row">
+        <input id="share-link-input" type="text" readonly />
+        <button id="copy-link-btn">Copy</button>
+      </div>
+      <button id="close-modal-btn" class="secondary">Done</button>
+    </div>
+  </div>
+
+  <div id="note-template" hidden>
+    <div class="note" data-color="default">
+      <input class="note-title" placeholder="Title" />
+      <div class="note-items"></div>
+      <form class="add-item-form">
+        <input class="add-item-input" placeholder="Add item" autocomplete="off" />
+      </form>
+      <div class="note-footer">
+        <div class="color-swatches"></div>
+        <button class="pin-btn" title="Pin">📌</button>
+        <button class="delete-btn" title="Delete">🗑️</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/board.js"></script>
+</body>
+</html>
