@@ -413,14 +413,21 @@ button:hover { filter: brightness(1.1); }
 
 .note-item .remove-item-btn {
   background: transparent;
-  padding: 2px 6px;
-  margin-top: 2px;
+  width: 32px;
+  height: 32px;
+  margin-top: -2px;
+  border-radius: 50%;
   color: var(--text-dim);
-  font-size: 13px;
+  font-size: 18px;
+  line-height: 1;
   visibility: hidden;
   flex-shrink: 0;
 }
 .note-item:hover .remove-item-btn { visibility: visible; }
+.note-item .remove-item-btn:hover {
+  background: rgba(128, 128, 128, 0.18);
+  color: var(--text);
+}
 
 .add-item-form { display: flex; }
 .add-item-input {
