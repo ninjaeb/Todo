@@ -263,6 +263,35 @@ button:hover { filter: brightness(1.1); }
 }
 .add-item-input:focus { outline: none; color: var(--text); }
 
+.completed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 6px 2px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+.completed-toggle[hidden] { display: none; }
+
+.completed-toggle .chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.completed-toggle.expanded .chevron {
+  transform: rotate(-180deg);
+}
+
+.completed-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.completed-items[hidden] { display: none; }
+
 .note-footer {
   display: flex;
   align-items: center;

@@ -113,6 +113,12 @@ function wireNoteElement(el, note) {
     putNote(note.id, { items: note.items });
   });
 
+  const completedToggle = el.querySelector('.completed-toggle');
+  completedToggle.addEventListener('click', () => {
+    el.dataset.completedExpanded = el.dataset.completedExpanded === 'true' ? 'false' : 'true';
+    updateNoteElement(el, note, { rebuildItems: true });
+  });
+
   const pinBtn = el.querySelector('.pin-btn');
   pinBtn.addEventListener('click', () => {
     note.pinned = !note.pinned;
@@ -157,7 +163,7 @@ function buildItemRow(note, item, el) {
   checkbox.checked = !!item.checked;
   checkbox.addEventListener('change', () => {
     item.checked = checkbox.checked;
-    row.classList.toggle('checked', item.checked);
+    updateNoteElement(el, note, { rebuildItems: true });
     putNote(note.id, { items: note.items });
   });
 
@@ -177,7 +183,7 @@ function buildItemRow(note, item, el) {
   removeBtn.textContent = '✕';
   removeBtn.addEventListener('click', () => {
     note.items = note.items.filter((it) => it.id !== item.id);
-    row.remove();
+    updateNoteElement(el, note, { rebuildItems: true });
     putNote(note.id, { items: note.items });
   });
 
@@ -199,14 +205,31 @@ function updateNoteElement(el, note, opts = {}) {
   });
 
   const itemsContainer = el.querySelector('.note-items');
-  const focusedItemId = itemsContainer.contains(document.activeElement)
+  const completedContainer = el.querySelector('.completed-items');
+  const completedToggle = el.querySelector('.completed-toggle');
+
+  const focusedItemId = el.contains(document.activeElement)
     ? document.activeElement.closest('.note-item')?.dataset.itemId
     : null;
 
+  const activeItems = note.items.filter((item) => !item.checked);
+  const completedItems = note.items.filter((item) => item.checked);
+  const expanded = el.dataset.completedExpanded === 'true';
+
   if (opts.rebuildItems || !focusedItemId) {
     itemsContainer.innerHTML = '';
-    note.items.forEach((item) => itemsContainer.appendChild(buildItemRow(note, item, el)));
+    activeItems.forEach((item) => itemsContainer.appendChild(buildItemRow(note, item, el)));
+
+    completedContainer.innerHTML = '';
+    if (expanded) {
+      completedItems.forEach((item) => completedContainer.appendChild(buildItemRow(note, item, el)));
+    }
   }
+
+  completedToggle.hidden = completedItems.length === 0;
+  completedToggle.classList.toggle('expanded', expanded);
+  completedToggle.querySelector('.completed-count').textContent = `${completedItems.length} completed item${completedItems.length === 1 ? '' : 's'}`;
+  completedContainer.hidden = !expanded;
 }
 
 function applyBoardUpdate(board) {
