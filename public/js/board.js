@@ -442,7 +442,6 @@ function updateNoteElement(el, note) {
 
 function applyBoardUpdate(board) {
   state.board = board;
-  setUpDeleteBoardButton(board);
   renderAll();
 }
 
@@ -482,35 +481,6 @@ boardTitleInput.addEventListener('input', () => {
 });
 
 wireThemeToggle('theme-toggle');
-
-const deleteBoardBtn = document.getElementById('delete-board-btn');
-
-// Runs once board data has actually loaded, since eligibility depends on
-// board.hasOwner (unknown until then) as well as local ownership tracking.
-function setUpDeleteBoardButton(board) {
-  const owned = MyBoards.get(boardId);
-  // Show the button if this browser holds the real owner token, or if the
-  // board predates the ownership feature entirely (hasOwner false) — those
-  // stay manageable by anyone with the link, same as before this shipped.
-  const canDelete = !!owned || board.hasOwner === false;
-  if (!canDelete) return;
-
-  deleteBoardBtn.hidden = false;
-  deleteBoardBtn.addEventListener('click', async () => {
-    if (!confirm('Delete this entire board and everything on it? This cannot be undone.')) return;
-    try {
-      await api(`/api/boards/${boardId}`, {
-        method: 'DELETE',
-        headers: { 'X-Owner-Token': owned ? owned.ownerToken : '' },
-      });
-      MyBoards.remove(boardId);
-      window.location.href = '/';
-    } catch (err) {
-      alert('Could not delete this board.');
-      console.error(err);
-    }
-  });
-}
 
 const noteDetailModal = document.getElementById('note-detail-modal');
 document.getElementById('close-detail-btn').addEventListener('click', closeNoteDetail);
