@@ -437,8 +437,8 @@ button:hover { filter: brightness(1.1); }
   border: none;
   border-top: 1px dashed transparent;
   color: var(--text-dim);
-  font-size: 14px;
-  padding: 4px 2px;
+  font-size: 17px;
+  padding: 10px 2px;
 }
 .add-item-input:focus { outline: none; color: var(--text); }
 
