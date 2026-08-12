@@ -320,6 +320,10 @@ button:hover { filter: brightness(1.1); }
   z-index: 100;
 }
 
+.modal-overlay[hidden] {
+  display: none;
+}
+
 .modal {
   background: var(--card);
   border: 1px solid var(--border);
