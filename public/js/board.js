@@ -1,9 +1,14 @@
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 
-const boardId = window.location.pathname.split('/board/')[1];
+// Path is either /board/:boardId or /board/:boardId/note/:noteId (a note's
+// own shareable link — opens the board with that note's detail view up).
+const pathSegments = window.location.pathname.split('/').filter(Boolean);
+const boardId = pathSegments[1];
+const initialNoteId = pathSegments[2] === 'note' ? pathSegments[3] : null;
 if (!boardId) window.location.href = '/';
 
 const state = { board: null, openNoteId: null, detailEl: null };
+let hasAutoOpenedInitialNote = false;
 
 const grid = document.getElementById('notes-grid');
 const emptyState = document.getElementById('empty-state');
@@ -227,7 +232,7 @@ function buildNoteElement(note) {
   return el;
 }
 
-function openNoteDetail(noteId) {
+function openNoteDetail(noteId, { updateUrl = true } = {}) {
   const note = state.board.notes.find((n) => n.id === noteId);
   if (!note) return;
   state.openNoteId = noteId;
@@ -240,12 +245,14 @@ function openNoteDetail(noteId) {
   state.detailEl = buildNoteElement(note);
   container.appendChild(state.detailEl);
   state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
+  if (updateUrl) history.pushState({ noteId }, '', `/board/${boardId}/note/${noteId}`);
 }
 
-function closeNoteDetail() {
+function closeNoteDetail({ updateUrl = true } = {}) {
   state.openNoteId = null;
   state.detailEl = null;
   document.getElementById('note-detail-modal').hidden = true;
+  if (updateUrl) history.pushState({}, '', `/board/${boardId}`);
 }
 
 function wireNoteElement(el, note) {
@@ -443,6 +450,10 @@ function updateNoteElement(el, note) {
 function applyBoardUpdate(board) {
   state.board = board;
   renderAll();
+  if (initialNoteId && !hasAutoOpenedInitialNote) {
+    hasAutoOpenedInitialNote = true;
+    openNoteDetail(initialNoteId, { updateUrl: false });
+  }
 }
 
 async function loadBoard() {
@@ -483,9 +494,33 @@ boardTitleInput.addEventListener('input', () => {
 wireThemeToggle('theme-toggle');
 
 const noteDetailModal = document.getElementById('note-detail-modal');
-document.getElementById('close-detail-btn').addEventListener('click', closeNoteDetail);
+document.getElementById('close-detail-btn').addEventListener('click', () => closeNoteDetail());
 noteDetailModal.addEventListener('click', (e) => {
   if (e.target === noteDetailModal) closeNoteDetail();
+});
+
+document.getElementById('copy-note-link-btn').addEventListener('click', async () => {
+  if (!state.openNoteId) return;
+  const url = `${window.location.origin}/board/${boardId}/note/${state.openNoteId}`;
+  const btn = document.getElementById('copy-note-link-btn');
+  const original = btn.textContent;
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = 'Copied!';
+  } catch {
+    window.prompt('Copy this link:', url);
+  }
+  setTimeout(() => (btn.textContent = original), 1500);
+});
+
+window.addEventListener('popstate', () => {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  const noteId = parts[2] === 'note' ? parts[3] : null;
+  if (noteId) {
+    openNoteDetail(noteId, { updateUrl: false });
+  } else {
+    closeNoteDetail({ updateUrl: false });
+  }
 });
 
 const shareModal = document.getElementById('share-modal');

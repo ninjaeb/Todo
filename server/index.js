@@ -1,4 +1,5 @@
 require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const http = require('http');
@@ -7,6 +8,7 @@ const { Server } = require('socket.io');
 const { nanoid } = require('nanoid');
 const db = require('./db');
 const adminAuth = require('./adminAuth');
+const { renderNoteSvg } = require('./ogImage');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +17,55 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
 const ADMIN_SESSION_COOKIE = 'admin_session';
+
+const boardHtmlTemplate = fs.readFileSync(path.join(__dirname, '..', 'public', 'board.html'), 'utf-8');
+
+function escapeHtmlAttr(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[c]));
+}
+
+// Injects Open Graph / Twitter Card meta tags (and a matching <title>) into
+// the static board.html template, so crawlers that don't run JS (Slack,
+// Discord, Twitter/X, iMessage, etc.) still see a proper link preview —
+// the client-side app takes over from there once a browser loads it.
+function renderBoardHtmlWithMeta({ title, description, imageUrl, pageUrl }) {
+  const fullTitle = `${title} · Todo Keep`;
+  const tags = [
+    `<meta property="og:type" content="website" />`,
+    `<meta property="og:title" content="${escapeHtmlAttr(title)}" />`,
+    `<meta property="og:description" content="${escapeHtmlAttr(description)}" />`,
+    `<meta property="og:url" content="${escapeHtmlAttr(pageUrl)}" />`,
+    imageUrl ? `<meta property="og:image" content="${escapeHtmlAttr(imageUrl)}" />` : '',
+    imageUrl ? `<meta property="og:image:width" content="1200" />` : '',
+    imageUrl ? `<meta property="og:image:height" content="630" />` : '',
+    `<meta name="twitter:card" content="${imageUrl ? 'summary_large_image' : 'summary'}" />`,
+    `<meta name="twitter:title" content="${escapeHtmlAttr(title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtmlAttr(description)}" />`,
+    imageUrl ? `<meta name="twitter:image" content="${escapeHtmlAttr(imageUrl)}" />` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return boardHtmlTemplate
+    .replace('<title>Board · Todo Keep</title>', `<title>${escapeHtmlAttr(fullTitle)}</title>`)
+    .replace('</head>', `${tags}\n</head>`);
+}
+
+function summarizeItems(items) {
+  if (!items || items.length === 0) return 'An empty checklist on Todo Keep.';
+  const done = items.filter((i) => i.checked).length;
+  const preview = items
+    .slice(0, 5)
+    .map((i) => (i.checked ? '✓ ' : '• ') + (i.text || '(empty item)'))
+    .join('  ·  ');
+  return `${done}/${items.length} done — ${preview}${items.length > 5 ? '…' : ''}`;
+}
 
 app.use(express.json());
 app.use(cookieParser());
@@ -244,9 +295,72 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
 });
 
+// SVG preview image for a single note (used as its Open Graph image).
+// Regenerated on every request from live data — the list can change, and
+// this app has no page-caching layer, so "no-cache" keeps it honest rather
+// than showing a stale checklist in a chat's link preview.
+app.get(
+  '/api/boards/:boardId/notes/:noteId/og-image.svg',
+  requireBoard,
+  (req, res) => {
+    const note = req.board.notes.find((n) => n.id === req.params.noteId);
+    if (!note) return res.status(404).end();
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.send(renderNoteSvg(note));
+  }
+);
+
+// A note's shareable link: opens the full board with that note's detail
+// view already showing (see board.js), but the initial HTML response also
+// carries Open Graph tags describing that specific note — link-preview
+// crawlers (Slack, Discord, Twitter/X, iMessage, etc.) don't run JS, so
+// this has to be baked into the server-rendered response, not added later
+// client-side.
+app.get('/board/:boardId/note/:noteId', async (req, res, next) => {
+  try {
+    const board = await db.getBoard(req.params.boardId, { includeDeleted: req.isAdmin });
+    if (!board) return res.status(404).sendFile(path.join(__dirname, '..', 'public', 'board.html'));
+    const note = board.notes.find((n) => n.id === req.params.noteId);
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    if (!note) {
+      return res.status(404).send(
+        renderBoardHtmlWithMeta({
+          title: board.title || 'Untitled board',
+          description: 'This list no longer exists on this board.',
+          pageUrl: `${baseUrl}/board/${board.id}`,
+        })
+      );
+    }
+    res.send(
+      renderBoardHtmlWithMeta({
+        title: note.title || 'Untitled list',
+        description: summarizeItems(note.items),
+        imageUrl: `${baseUrl}/api/boards/${board.id}/notes/${note.id}/og-image.svg`,
+        pageUrl: `${baseUrl}/board/${board.id}/note/${note.id}`,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Fallback: send the board page for any /board/:id deep link
-app.get('/board/:boardId', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'public', 'board.html'));
+app.get('/board/:boardId', async (req, res, next) => {
+  try {
+    const board = await db.getBoard(req.params.boardId, { includeDeleted: req.isAdmin });
+    if (!board) return res.status(404).sendFile(path.join(__dirname, '..', 'public', 'board.html'));
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.send(
+      renderBoardHtmlWithMeta({
+        title: board.title || 'Untitled board',
+        description: `${board.notes.length} list${board.notes.length === 1 ? '' : 's'} on Todo Keep — a shareable, collaborative todo board.`,
+        pageUrl: `${baseUrl}/board/${board.id}`,
+      })
+    );
+  } catch (err) {
+    next(err);
+  }
 });
 
 app.use((err, req, res, next) => {
