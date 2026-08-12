@@ -48,8 +48,56 @@ document.getElementById('create-form').addEventListener('submit', async (e) => {
     body: JSON.stringify({ title }),
   });
   const board = await res.json();
+  MyBoards.add(board);
   window.location.href = `/board/${board.id}`;
 });
+
+function renderMyBoards() {
+  const boards = MyBoards.list();
+  const section = document.getElementById('my-boards');
+  const list = document.getElementById('my-boards-list');
+  section.hidden = boards.length === 0;
+  list.innerHTML = '';
+
+  boards.forEach((board) => {
+    const li = document.createElement('li');
+
+    const openBtn = document.createElement('button');
+    openBtn.type = 'button';
+    openBtn.className = 'open-board';
+    openBtn.textContent = board.title || 'Untitled board';
+    openBtn.addEventListener('click', () => {
+      window.location.href = `/board/${board.id}`;
+    });
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.type = 'button';
+    deleteBtn.className = 'delete-board';
+    deleteBtn.textContent = 'Delete';
+    deleteBtn.addEventListener('click', async () => {
+      if (!confirm(`Delete "${board.title || 'Untitled board'}" and everything on it?`)) return;
+      try {
+        const res = await fetch(`/api/boards/${board.id}`, {
+          method: 'DELETE',
+          headers: { 'X-Owner-Token': board.ownerToken },
+        });
+        if (!res.ok && res.status !== 404) throw new Error(`status ${res.status}`);
+      } catch (err) {
+        alert('Could not delete this board.');
+        console.error(err);
+        return;
+      }
+      MyBoards.remove(board.id);
+      renderMyBoards();
+    });
+
+    li.append(openBtn, deleteBtn);
+    list.appendChild(li);
+  });
+}
+
+wireThemeToggle('theme-toggle');
+renderMyBoards();
 
 document.getElementById('join-form').addEventListener('submit', async (e) => {
   e.preventDefault();

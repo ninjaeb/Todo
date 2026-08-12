@@ -39,7 +39,8 @@ app.post(
   '/api/boards',
   asyncRoute(async (req, res) => {
     const title = req.body && req.body.title && req.body.title.trim() ? req.body.title.trim() : 'Untitled board';
-    const board = await db.createBoard(nanoid(12), title);
+    const ownerToken = nanoid(24);
+    const board = await db.createBoard(nanoid(12), title, ownerToken);
     res.status(201).json(board);
   })
 );
@@ -74,6 +75,19 @@ app.put(
       req.board.updatedAt = updatedAt;
     }
     res.json(req.board);
+  })
+);
+
+// Delete a board (only the browser holding its owner token can do this)
+app.delete(
+  '/api/boards/:boardId',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const ownerToken = req.get('X-Owner-Token') || '';
+    const deleted = await db.deleteBoard(req.board.id, ownerToken);
+    if (!deleted) return res.status(403).json({ error: 'Not authorized to delete this board' });
+    io.to(req.board.id).emit('board:deleted');
+    res.status(204).end();
   })
 );
 

@@ -3,13 +3,15 @@ const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', '
 const boardId = window.location.pathname.split('/board/')[1];
 if (!boardId) window.location.href = '/';
 
-const state = { board: null };
+const state = { board: null, openNoteId: null, detailEl: null };
 
 const grid = document.getElementById('notes-grid');
 const emptyState = document.getElementById('empty-state');
 const boardTitleInput = document.getElementById('board-title-input');
 const presenceEl = document.getElementById('presence');
 const noteTemplate = document.getElementById('note-template').firstElementChild;
+
+let draggedRow = null;
 
 function autosizeTextarea(el) {
   el.style.height = 'auto';
@@ -121,11 +123,15 @@ function mergeNote(incoming) {
 }
 
 function syncItemsContainer(container, items, note, el) {
+  // Don't fight an in-progress drag reorder within this same container.
+  if (draggedRow && draggedRow.parentElement === container) return;
+
   const existingRows = new Map([...container.children].map((child) => [child.dataset.itemId, child]));
   const usedIds = new Set();
 
   items.forEach((item) => {
     usedIds.add(item.id);
+    const text = item.text || '';
     let row = existingRows.get(item.id);
     if (!row) {
       row = buildItemRow(note, item, el);
@@ -138,8 +144,8 @@ function syncItemsContainer(container, items, note, el) {
     const textarea = row.querySelector('.item-text');
     if (document.activeElement !== checkbox) checkbox.checked = !!item.checked;
     row.classList.toggle('checked', !!item.checked);
-    if (document.activeElement !== textarea && textarea.value !== item.text) {
-      textarea.value = item.text;
+    if (document.activeElement !== textarea && textarea.value !== text) {
+      textarea.value = text;
       autosizeTextarea(textarea);
     }
     container.appendChild(row); // reorders without losing focus/state
@@ -148,6 +154,34 @@ function syncItemsContainer(container, items, note, el) {
   existingRows.forEach((row, id) => {
     if (!usedIds.has(id)) row.remove();
   });
+}
+
+function getDragAfterElement(container, y) {
+  const rows = [...container.querySelectorAll('.note-item:not(.dragging)')];
+  return rows.reduce(
+    (closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height / 2;
+      if (offset < 0 && offset > closest.offset) {
+        return { offset, element: child };
+      }
+      return closest;
+    },
+    { offset: Number.NEGATIVE_INFINITY, element: null }
+  ).element;
+}
+
+function persistItemOrder(note, el) {
+  const itemsContainer = el.querySelector('.note-items');
+  const orderedIds = [...itemsContainer.children].map((row) => row.dataset.itemId);
+  const byId = new Map(note.items.map((it) => [it.id, it]));
+  const reordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  const seen = new Set(reordered.map((it) => it.id));
+  note.items.forEach((it) => {
+    if (!seen.has(it.id)) reordered.push(it);
+  });
+  note.items = reordered;
+  putNote(note.id, { items: note.items });
 }
 
 function renderAll() {
@@ -174,6 +208,15 @@ function renderAll() {
       updateNoteElement(el, note);
     }
   });
+
+  if (state.openNoteId) {
+    const openNote = state.board.notes.find((n) => n.id === state.openNoteId);
+    if (!openNote) {
+      closeNoteDetail();
+    } else if (state.detailEl) {
+      updateNoteElement(state.detailEl, openNote);
+    }
+  }
 }
 
 function buildNoteElement(note) {
@@ -182,6 +225,24 @@ function buildNoteElement(note) {
   wireNoteElement(el, note);
   updateNoteElement(el, note);
   return el;
+}
+
+function openNoteDetail(noteId) {
+  const note = state.board.notes.find((n) => n.id === noteId);
+  if (!note) return;
+  state.openNoteId = noteId;
+  const container = document.getElementById('note-detail-content');
+  container.innerHTML = '';
+  state.detailEl = buildNoteElement(note);
+  container.appendChild(state.detailEl);
+  state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
+  document.getElementById('note-detail-modal').hidden = false;
+}
+
+function closeNoteDetail() {
+  state.openNoteId = null;
+  state.detailEl = null;
+  document.getElementById('note-detail-modal').hidden = true;
 }
 
 function wireNoteElement(el, note) {
@@ -193,6 +254,31 @@ function wireNoteElement(el, note) {
   });
   titleInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') e.preventDefault();
+  });
+
+  // Drag-to-reorder for active items.
+  const itemsContainer = el.querySelector('.note-items');
+  itemsContainer.addEventListener('dragover', (e) => {
+    if (!draggedRow || draggedRow.parentElement !== itemsContainer) return;
+    e.preventDefault();
+    const after = getDragAfterElement(itemsContainer, e.clientY);
+    if (after == null) itemsContainer.appendChild(draggedRow);
+    else itemsContainer.insertBefore(draggedRow, after);
+  });
+  itemsContainer.addEventListener('drop', (e) => {
+    // Persisting happens in the drag handle's dragend handler, which fires
+    // reliably regardless of whether the browser also dispatches "drop" —
+    // this listener just prevents the browser's default drop behavior.
+    if (draggedRow) e.preventDefault();
+  });
+
+  // Click the card background (not a control) to open the larger detail view.
+  // Only wired for grid cards — the detail modal reuses this same builder, so
+  // skip it there to avoid a click inside the modal trying to reopen itself.
+  el.addEventListener('click', (e) => {
+    if (el.closest('#note-detail-content')) return;
+    if (e.target.closest('input, textarea, button')) return;
+    openNoteDetail(note.id);
   });
 
   const addForm = el.querySelector('.add-item-form');
@@ -252,6 +338,26 @@ function buildItemRow(note, item, el) {
   row.className = `note-item${item.checked ? ' checked' : ''}`;
   row.dataset.itemId = item.id;
 
+  const handle = document.createElement('span');
+  handle.className = 'drag-handle';
+  handle.textContent = '⠿';
+  handle.title = 'Drag to reorder';
+  handle.draggable = true;
+  handle.addEventListener('dragstart', (e) => {
+    draggedRow = row;
+    row.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', item.id);
+  });
+  handle.addEventListener('dragend', () => {
+    row.classList.remove('dragging');
+    draggedRow = null;
+    // dragend always fires (even if a "drop" event doesn't land on a valid
+    // target), so persisting here — rather than only in a "drop" handler —
+    // reliably saves the reorder regardless of exactly how the drag ended.
+    persistItemOrder(note, el);
+  });
+
   const checkbox = document.createElement('input');
   checkbox.type = 'checkbox';
   checkbox.checked = !!item.checked;
@@ -264,7 +370,7 @@ function buildItemRow(note, item, el) {
   const text = document.createElement('textarea');
   text.rows = 1;
   text.className = 'item-text';
-  text.value = item.text;
+  text.value = item.text || '';
   text.placeholder = 'List item';
   text.addEventListener('input', () => {
     item.text = text.value;
@@ -285,7 +391,7 @@ function buildItemRow(note, item, el) {
     putNote(note.id, { items: note.items });
   });
 
-  row.append(checkbox, text, removeBtn);
+  row.append(handle, checkbox, text, removeBtn);
   return row;
 }
 
@@ -360,7 +466,36 @@ document.getElementById('new-note-form').addEventListener('submit', async (e) =>
 boardTitleInput.addEventListener('input', () => {
   state.board.title = boardTitleInput.value;
   document.title = `${state.board.title || 'Untitled board'} · Todo Keep`;
+  MyBoards.updateTitle(boardId, boardTitleInput.value);
   debouncedBoardRename(boardTitleInput.value);
+});
+
+wireThemeToggle('theme-toggle');
+
+const deleteBoardBtn = document.getElementById('delete-board-btn');
+const owned = MyBoards.get(boardId);
+if (owned) {
+  deleteBoardBtn.hidden = false;
+  deleteBoardBtn.addEventListener('click', async () => {
+    if (!confirm('Delete this entire board and everything on it? This cannot be undone.')) return;
+    try {
+      await api(`/api/boards/${boardId}`, {
+        method: 'DELETE',
+        headers: { 'X-Owner-Token': owned.ownerToken },
+      });
+      MyBoards.remove(boardId);
+      window.location.href = '/';
+    } catch (err) {
+      alert('Could not delete this board.');
+      console.error(err);
+    }
+  });
+}
+
+const noteDetailModal = document.getElementById('note-detail-modal');
+document.getElementById('close-detail-btn').addEventListener('click', closeNoteDetail);
+noteDetailModal.addEventListener('click', (e) => {
+  if (e.target === noteDetailModal) closeNoteDetail();
 });
 
 const shareModal = document.getElementById('share-modal');
@@ -427,6 +562,13 @@ socket.on('board:renamed', ({ title }) => {
   state.board.title = title;
   if (document.activeElement !== boardTitleInput) boardTitleInput.value = title;
   document.title = `${title} · Todo Keep`;
+  MyBoards.updateTitle(boardId, title);
+});
+
+socket.on('board:deleted', () => {
+  MyBoards.remove(boardId);
+  alert('This board was deleted.');
+  window.location.href = '/';
 });
 
 loadBoard();

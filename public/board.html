@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Board · Todo Keep</title>
 <link rel="stylesheet" href="/css/styles.css" />
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem('todoKeepTheme') || 'light';
+  } catch {}
+</script>
 </head>
 <body>
   <header class="topbar">
@@ -14,6 +19,8 @@
     </div>
     <div class="topbar-right">
       <span id="presence" class="presence" title="People currently viewing this board">👀 1</span>
+      <button id="theme-toggle" class="theme-toggle" type="button" title="Toggle theme">🌙</button>
+      <button id="delete-board-btn" class="delete-board-btn" type="button" hidden>Delete board</button>
       <button id="share-btn" class="share-btn">Share</button>
     </div>
   </header>
@@ -40,6 +47,15 @@
     </div>
   </div>
 
+  <div id="note-detail-modal" class="modal-overlay" hidden>
+    <div class="modal note-detail">
+      <div id="note-detail-content"></div>
+      <div class="detail-close-row">
+        <button id="close-detail-btn" class="secondary">Close</button>
+      </div>
+    </div>
+  </div>
+
   <div id="note-template" hidden>
     <div class="note" data-color="default">
       <textarea class="note-title" placeholder="Title" rows="1"></textarea>
@@ -61,6 +77,8 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/theme.js"></script>
+  <script src="/js/my-boards.js"></script>
   <script src="/js/board.js"></script>
 </body>
 </html>

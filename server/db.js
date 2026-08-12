@@ -45,10 +45,21 @@ async function initSchema() {
     CREATE TABLE IF NOT EXISTS boards (
       id VARCHAR(32) PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
+      owner_token VARCHAR(32) NOT NULL,
       created_at DATETIME(3) NOT NULL,
       updated_at DATETIME(3) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+
+  // Older deployments may already have a boards table from before owner_token existed.
+  const [ownerTokenColumn] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'boards' AND COLUMN_NAME = 'owner_token'`,
+    [DB_NAME]
+  );
+  if (ownerTokenColumn.length === 0) {
+    await pool.query("ALTER TABLE boards ADD COLUMN owner_token VARCHAR(32) NOT NULL DEFAULT ''");
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notes (
@@ -90,15 +101,29 @@ function rowToNote(row) {
   };
 }
 
-async function createBoard(id, title) {
+async function createBoard(id, title, ownerToken) {
   const now = new Date();
-  await pool.query('INSERT INTO boards (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)', [
+  await pool.query('INSERT INTO boards (id, title, owner_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
     id,
     title,
+    ownerToken,
     now,
     now,
   ]);
-  return { id, title, createdAt: now, updatedAt: now, notes: [] };
+  return { id, title, ownerToken, createdAt: now, updatedAt: now, notes: [] };
+}
+
+// Deletes a board only if the given token matches its owner_token (set once at
+// creation and known only to the browser that created it). Returns false for a
+// missing board OR a token mismatch, so callers can't distinguish "wrong token"
+// from "board doesn't exist" and probe for valid board IDs.
+async function deleteBoard(boardId, ownerToken) {
+  const [result] = await pool.query('DELETE FROM boards WHERE id = ? AND owner_token = ? AND owner_token != ?', [
+    boardId,
+    ownerToken || '',
+    '',
+  ]);
+  return result.affectedRows > 0;
 }
 
 async function getBoard(boardId) {
@@ -182,6 +207,7 @@ module.exports = {
   createBoard,
   getBoard,
   renameBoard,
+  deleteBoard,
   createNote,
   updateNote,
   deleteNote,
