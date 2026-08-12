@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Admin · Todo Keep</title>
+<link rel="stylesheet" href="/css/styles.css" />
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem('todoKeepTheme') || 'light';
+  } catch {}
+</script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <a href="/" class="logo" title="Home">📝</a>
+      <span style="font-size:18px; font-weight:600;">Admin</span>
+    </div>
+    <div class="topbar-right">
+      <button id="theme-toggle" class="theme-toggle" type="button" title="Toggle theme">🌙</button>
+      <button id="logout-btn" class="secondary" type="button" hidden>Log out</button>
+    </div>
+  </header>
+
+  <main class="board-main" style="max-width: 900px;">
+    <div id="login-card" class="home-card" style="margin: 40px auto 0;">
+      <h1 style="font-size:20px;">Admin login</h1>
+      <p class="subtitle">Manage every board on this server — view, delete, restore, and permanently purge.</p>
+      <form id="login-form">
+        <input id="admin-password" type="password" placeholder="Admin password" autocomplete="current-password" />
+        <button type="submit">Log in</button>
+      </form>
+      <p id="login-error" class="join-status" hidden style="color: var(--danger);"></p>
+    </div>
+
+    <div id="admin-panel" hidden>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin: 20px 0;">
+        <input id="admin-filter" type="text" placeholder="Filter by title…" style="max-width:320px;" autocomplete="off" />
+        <span id="board-count" style="color: var(--text-dim); font-size:14px;"></span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table id="boards-table" style="width:100%; border-collapse:collapse; font-size:14px;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid var(--border);">
+              <th style="padding:10px 8px;">Title</th>
+              <th style="padding:10px 8px;">Lists</th>
+              <th style="padding:10px 8px;">Owner</th>
+              <th style="padding:10px 8px;">Updated</th>
+              <th style="padding:10px 8px;">Status</th>
+              <th style="padding:10px 8px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="boards-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <script src="/js/theme.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

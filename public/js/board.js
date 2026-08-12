@@ -231,12 +231,15 @@ function openNoteDetail(noteId) {
   const note = state.board.notes.find((n) => n.id === noteId);
   if (!note) return;
   state.openNoteId = noteId;
+  // Un-hide the modal BEFORE building/autosizing its content — a textarea
+  // inside a display:none ancestor always reports scrollHeight 0, which is
+  // exactly the "note opens but everything looks blank" bug.
+  document.getElementById('note-detail-modal').hidden = false;
   const container = document.getElementById('note-detail-content');
   container.innerHTML = '';
   state.detailEl = buildNoteElement(note);
   container.appendChild(state.detailEl);
   state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
-  document.getElementById('note-detail-modal').hidden = false;
 }
 
 function closeNoteDetail() {

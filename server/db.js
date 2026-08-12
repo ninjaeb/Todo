@@ -46,20 +46,25 @@ async function initSchema() {
       id VARCHAR(32) PRIMARY KEY,
       title VARCHAR(255) NOT NULL,
       owner_token VARCHAR(32) NOT NULL,
+      deleted_at DATETIME(3) NULL DEFAULT NULL,
       created_at DATETIME(3) NOT NULL,
       updated_at DATETIME(3) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
-  // Older deployments may already have a boards table from before owner_token existed.
-  const [ownerTokenColumn] = await pool.query(
-    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
-     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'boards' AND COLUMN_NAME = 'owner_token'`,
-    [DB_NAME]
-  );
-  if (ownerTokenColumn.length === 0) {
-    await pool.query("ALTER TABLE boards ADD COLUMN owner_token VARCHAR(32) NOT NULL DEFAULT ''");
+  // Older deployments may already have a boards table predating a given column.
+  async function ensureColumn(name, ddl) {
+    const [rows] = await pool.query(
+      `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'boards' AND COLUMN_NAME = ?`,
+      [DB_NAME, name]
+    );
+    if (rows.length === 0) {
+      await pool.query(`ALTER TABLE boards ADD COLUMN ${ddl}`);
+    }
   }
+  await ensureColumn('owner_token', "owner_token VARCHAR(32) NOT NULL DEFAULT ''");
+  await ensureColumn('deleted_at', 'deleted_at DATETIME(3) NULL DEFAULT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notes (
@@ -87,6 +92,7 @@ function rowToBoard(boardRow, noteRows) {
     // owner_token, so hasOwner is false and anyone can still delete them,
     // preserving the old "link = full access" behavior for those boards.
     hasOwner: !!boardRow.owner_token,
+    deletedAt: boardRow.deleted_at,
     createdAt: boardRow.created_at,
     updatedAt: boardRow.updated_at,
     notes: noteRows.map(rowToNote),
@@ -118,21 +124,66 @@ async function createBoard(id, title, ownerToken) {
   return { id, title, ownerToken, createdAt: now, updatedAt: now, notes: [] };
 }
 
-// Deletes a board if the given token matches its owner_token, OR if the board
-// has no owner_token at all (a board created before ownership existed, back
-// when the share link alone granted full access — those stay deletable by
-// anyone with the link rather than becoming permanently stuck). Returns false
-// for a missing board or a real token mismatch.
+// Soft-deletes (sets deleted_at) a board if the given token matches its
+// owner_token, OR if the board has no owner_token at all (a board created
+// before ownership existed, back when the share link alone granted full
+// access — those stay deletable by anyone with the link). Returns false for
+// a missing/already-deleted board or a real token mismatch.
 async function deleteBoard(boardId, ownerToken) {
   const [result] = await pool.query(
-    "DELETE FROM boards WHERE id = ? AND (owner_token = '' OR owner_token = ?)",
+    "UPDATE boards SET deleted_at = NOW(3) WHERE id = ? AND deleted_at IS NULL AND (owner_token = '' OR owner_token = ?)",
     [boardId, ownerToken || '']
   );
   return result.affectedRows > 0;
 }
 
-async function getBoard(boardId) {
-  const [boardRows] = await pool.query('SELECT * FROM boards WHERE id = ?', [boardId]);
+// Same as deleteBoard, but bypasses the owner-token check entirely — for the
+// admin, who may manage any board regardless of who created it.
+async function adminSoftDeleteBoard(boardId) {
+  const [result] = await pool.query('UPDATE boards SET deleted_at = NOW(3) WHERE id = ? AND deleted_at IS NULL', [
+    boardId,
+  ]);
+  return result.affectedRows > 0;
+}
+
+async function restoreBoard(boardId) {
+  const [result] = await pool.query('UPDATE boards SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL', [
+    boardId,
+  ]);
+  return result.affectedRows > 0;
+}
+
+// Irreversibly removes a board and its notes (cascades via FK). Admin-only.
+async function purgeBoard(boardId) {
+  const [result] = await pool.query('DELETE FROM boards WHERE id = ?', [boardId]);
+  return result.affectedRows > 0;
+}
+
+async function listAllBoardsForAdmin() {
+  const [rows] = await pool.query(`
+    SELECT b.id, b.title, b.owner_token, b.deleted_at, b.created_at, b.updated_at,
+           COUNT(n.id) AS note_count
+    FROM boards b
+    LEFT JOIN notes n ON n.board_id = b.id
+    GROUP BY b.id
+    ORDER BY (b.deleted_at IS NOT NULL), b.updated_at DESC
+  `);
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    hasOwner: !!row.owner_token,
+    noteCount: row.note_count,
+    deletedAt: row.deleted_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+async function getBoard(boardId, { includeDeleted = false } = {}) {
+  const [boardRows] = await pool.query(
+    `SELECT * FROM boards WHERE id = ?${includeDeleted ? '' : ' AND deleted_at IS NULL'}`,
+    [boardId]
+  );
   if (boardRows.length === 0) return null;
   const [noteRows] = await pool.query(
     'SELECT * FROM notes WHERE board_id = ? ORDER BY pinned DESC, created_at DESC',
@@ -201,7 +252,7 @@ async function deleteNote(boardId, noteId) {
 
 async function searchBoardsByTitle(query, limit = 10) {
   const [rows] = await pool.query(
-    'SELECT id, title, updated_at FROM boards WHERE title LIKE ? ORDER BY updated_at DESC LIMIT ?',
+    'SELECT id, title, updated_at FROM boards WHERE deleted_at IS NULL AND title LIKE ? ORDER BY updated_at DESC LIMIT ?',
     [`%${query}%`, limit]
   );
   return rows.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at }));
@@ -213,6 +264,10 @@ module.exports = {
   getBoard,
   renameBoard,
   deleteBoard,
+  adminSoftDeleteBoard,
+  restoreBoard,
+  purgeBoard,
+  listAllBoardsForAdmin,
   createNote,
   updateNote,
   deleteNote,

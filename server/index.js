@@ -2,17 +2,26 @@ require('dotenv').config();
 const path = require('path');
 const express = require('express');
 const http = require('http');
+const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const { nanoid } = require('nanoid');
 const db = require('./db');
+const adminAuth = require('./adminAuth');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+const ADMIN_SESSION_COOKIE = 'admin_session';
 
 app.use(express.json());
+app.use(cookieParser());
+app.use((req, res, next) => {
+  req.isAdmin = adminAuth.isValidSession(req.cookies?.[ADMIN_SESSION_COOKIE]);
+  next();
+});
 app.use(
   express.static(path.join(__dirname, '..', 'public'), {
     // "no-cache" (not "no-store"): browsers may keep a copy, but must
@@ -34,7 +43,9 @@ function asyncRoute(handler) {
 
 async function requireBoard(req, res, next) {
   try {
-    const board = await db.getBoard(req.params.boardId);
+    // An authenticated admin can open/edit a board even after it's been
+    // soft-deleted (e.g. to review it before restoring or purging).
+    const board = await db.getBoard(req.params.boardId, { includeDeleted: req.isAdmin });
     if (!board) {
       return res.status(404).json({ error: 'Board not found' });
     }
@@ -43,6 +54,11 @@ async function requireBoard(req, res, next) {
   } catch (err) {
     next(err);
   }
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.isAdmin) return res.status(401).json({ error: 'Admin authentication required' });
+  next();
 }
 
 // Create a new board
@@ -89,13 +105,15 @@ app.put(
   })
 );
 
-// Delete a board (only the browser holding its owner token can do this)
+// Soft-delete a board (owner token required, unless the admin is doing it —
+// the admin can delete/restore/purge any board regardless of ownership)
 app.delete(
   '/api/boards/:boardId',
   requireBoard,
   asyncRoute(async (req, res) => {
-    const ownerToken = req.get('X-Owner-Token') || '';
-    const deleted = await db.deleteBoard(req.board.id, ownerToken);
+    const deleted = req.isAdmin
+      ? await db.adminSoftDeleteBoard(req.board.id)
+      : await db.deleteBoard(req.board.id, req.get('X-Owner-Token') || '');
     if (!deleted) return res.status(403).json({ error: 'Not authorized to delete this board' });
     io.to(req.board.id).emit('board:deleted');
     res.status(204).end();
@@ -159,6 +177,72 @@ app.delete(
     res.status(204).end();
   })
 );
+
+// ---------- Admin ----------
+
+app.post(
+  '/api/admin/login',
+  asyncRoute(async (req, res) => {
+    if (!ADMIN_PASSWORD) {
+      return res.status(500).json({ error: 'Admin login is not configured on this server (set ADMIN_PASSWORD).' });
+    }
+    const { password } = req.body || {};
+    if (typeof password !== 'string' || !adminAuth.timingSafeEqual(password, ADMIN_PASSWORD)) {
+      return res.status(401).json({ error: 'Incorrect password' });
+    }
+    const token = adminAuth.createSession();
+    res.cookie(ADMIN_SESSION_COOKIE, token, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: req.secure,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.json({ ok: true });
+  })
+);
+
+app.post('/api/admin/logout', (req, res) => {
+  const token = req.cookies?.[ADMIN_SESSION_COOKIE];
+  if (token) adminAuth.destroySession(token);
+  res.clearCookie(ADMIN_SESSION_COOKIE);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/session', (req, res) => {
+  res.json({ authenticated: !!req.isAdmin });
+});
+
+app.get(
+  '/api/admin/boards',
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    res.json(await db.listAllBoardsForAdmin());
+  })
+);
+
+app.post(
+  '/api/admin/boards/:boardId/restore',
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const restored = await db.restoreBoard(req.params.boardId);
+    if (!restored) return res.status(404).json({ error: 'Board not found or not deleted' });
+    res.json({ ok: true });
+  })
+);
+
+app.delete(
+  '/api/admin/boards/:boardId/purge',
+  requireAdmin,
+  asyncRoute(async (req, res) => {
+    const purged = await db.purgeBoard(req.params.boardId);
+    if (!purged) return res.status(404).json({ error: 'Board not found' });
+    res.status(204).end();
+  })
+);
+
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
+});
 
 // Fallback: send the board page for any /board/:id deep link
 app.get('/board/:boardId', (req, res) => {

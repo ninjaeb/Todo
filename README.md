@@ -9,6 +9,7 @@ A Google Keep–style todo board you can share by link and collaborate on in rea
 - Check off items, edit titles/items inline, pick a note color, pin important lists, delete lists
 - Real-time sync across everyone viewing the same board (via WebSockets), with a live viewer count
 - No login required — data persists in MySQL
+- Optional admin panel (`/admin`) for the site owner: view every board, delete/restore/purge, and open any board directly
 
 ## Run locally
 
@@ -22,6 +23,14 @@ npm start
 ```
 
 Then open http://localhost:3000, create a board, and share the URL with collaborators.
+
+### Admin panel
+
+Set `ADMIN_PASSWORD` in `.env` to enable `/admin` — a password-protected page listing
+every board on the server, including deleted ones. Deleting a board (as its owner or
+via the admin panel) is a soft delete: it disappears from normal use but stays
+recoverable from `/admin` until an admin permanently purges it. Leave `ADMIN_PASSWORD`
+blank to disable admin login entirely.
 
 ## Tech
 
@@ -55,6 +64,7 @@ and just logs a warning and continues if it's not allowed to.
    - `DB_USER` = `cpanelusername_dbuser`
    - `DB_PASSWORD` = the password you set
    - `DB_NAME` = `cpanelusername_todo_keep`
+   - `ADMIN_PASSWORD` = a password of your choice, to enable the `/admin` panel (optional)
 5. Click **Run NPM Install** on the app page (this installs `express`, `mysql2`,
    `socket.io`, etc. using cPanel's bundled Node/npm).
 6. Click **Restart**. The app log on that page will show `Keep-style todo app running…`
