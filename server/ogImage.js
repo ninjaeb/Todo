@@ -63,6 +63,15 @@ const NOTE_COLORS = {
   pink: { bg: '#fce8f0', border: '#f3c2dc' },
 };
 
+// Roboto has no outline for emoji/symbol characters outside its own
+// coverage (e.g. bullet emoji some users type into item text) — charToGlyph
+// silently returns the .notdef glyph for those, which is a visible tofu
+// box, not a blank. Skip such characters entirely (no width, no path)
+// rather than drawing the box.
+function hasGlyph(font, char) {
+  return font.charToGlyphIndex(char) !== 0;
+}
+
 // Width of a run of text at a given font size, in px — used for both
 // wrapping and truncation, measured from real glyph advance widths rather
 // than a guessed characters-per-line constant.
@@ -70,6 +79,7 @@ function measureWidth(font, text, fontSize) {
   const scale = fontSize / font.unitsPerEm;
   let width = 0;
   for (const char of text) {
+    if (!hasGlyph(font, char)) continue;
     width += (font.charToGlyph(char).advanceWidth || 0) * scale;
   }
   return width;
@@ -83,6 +93,7 @@ function textToPath(font, text, x, y, fontSize) {
   const combined = new opentype.Path();
   let curX = x;
   for (const char of text) {
+    if (!hasGlyph(font, char)) continue;
     const glyph = font.charToGlyph(char);
     combined.extend(glyph.getPath(curX, y, fontSize));
     curX += (glyph.advanceWidth || 0) * scale;
