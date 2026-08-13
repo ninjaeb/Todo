@@ -48,12 +48,21 @@
 
 * { box-sizing: border-box; }
 
+html {
+  /* Stops mobile browsers from treating a quick tap on a note/button as a
+     "double-tap to zoom" gesture — that's what was making the page look
+     pinch-zoomed and cutting off text after tapping a note card. Pinch
+     zoom itself is untouched (this only removes the tap-triggered zoom). */
+  touch-action: manipulation;
+}
+
 body {
   margin: 0;
   font-family: 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 a { color: inherit; text-decoration: none; }

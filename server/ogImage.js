@@ -1,8 +1,31 @@
-// Renders a lightweight social-preview card (SVG, not raster) for a note.
-// SVG keeps this dependency-free — no canvas/image library needed — at the
-// cost of not rendering as a preview image on a few platforms (notably
-// Facebook) that require PNG/JPG; the title/description text still shows
-// there regardless, via the surrounding Open Graph meta tags.
+// Renders a lightweight social-preview card (SVG, rasterized to PNG
+// elsewhere via sharp) for a note.
+//
+// Text is drawn with an embedded font (base64 data URI, bundled in
+// server/assets/fonts/) rather than a named system font like "Roboto" or
+// "Segoe UI" — a bare font-family reference only renders if that font
+// happens to be installed on the server, and most minimal Linux hosts have
+// none, which is exactly what produced blank "tofu" boxes instead of text
+// in early testing. Embedding removes that dependency entirely.
+
+const fs = require('fs');
+const path = require('path');
+
+const FONT_REGULAR_BASE64 = fs.readFileSync(path.join(__dirname, 'assets/fonts/Roboto-Regular.woff')).toString('base64');
+const FONT_BOLD_BASE64 = fs.readFileSync(path.join(__dirname, 'assets/fonts/Roboto-Bold.woff')).toString('base64');
+
+const FONT_FACES = `
+  @font-face {
+    font-family: 'OgImageFont';
+    font-weight: 400;
+    src: url(data:font/woff;base64,${FONT_REGULAR_BASE64}) format('woff');
+  }
+  @font-face {
+    font-family: 'OgImageFont';
+    font-weight: 700;
+    src: url(data:font/woff;base64,${FONT_BOLD_BASE64}) format('woff');
+  }
+`;
 
 const NOTE_COLORS = {
   default: { bg: '#ffffff', border: '#e0e0e0' },
@@ -49,7 +72,7 @@ function truncateToLine(text, maxChars) {
   return `${lines[0]}…`;
 }
 
-const FONT = "'Segoe UI', Roboto, Arial, sans-serif";
+const FONT = "'OgImageFont', sans-serif";
 
 function renderNoteSvg(note) {
   const W = 1200;
@@ -104,6 +127,7 @@ function renderNoteSvg(note) {
     .join('\n');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <style>${FONT_FACES}</style>
   <rect width="${W}" height="${H}" fill="${colors.bg}" />
   <rect x="2" y="2" width="${W - 4}" height="${H - 4}" fill="none" stroke="${colors.border}" stroke-width="4" />
   ${titleSvg}
