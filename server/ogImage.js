@@ -56,6 +56,20 @@ const PRIORITY_COLORS = {
   medium: '#f5a623',
   low: '#34a853',
 };
+const PRIORITY_RANK = { high: 3, medium: 2, low: 1 };
+
+// Matches the client's priority auto-sort (public/js/board.js) exactly:
+// higher-priority items float to the top, items of equal priority (or none)
+// keep their existing relative order. The board only applies this ordering
+// at render time — it isn't persisted back into the stored items array — so
+// without doing the same sort here, the preview image could show a
+// different order than what's actually visible on the board.
+function sortByPriority(items) {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (PRIORITY_RANK[b.item.priority] || 0) - (PRIORITY_RANK[a.item.priority] || 0) || a.index - b.index)
+    .map(({ item }) => item);
+}
 
 const NOTE_COLORS = {
   default: { bg: '#ffffff', border: '#e0e0e0' },
@@ -149,7 +163,7 @@ function renderNoteSvgWithGlyphs(note) {
   // entirely: the preview is meant to show what's left to do, not a record
   // of what's already done.
   const MAX_ITEMS = 40;
-  const openItems = (note.items || []).filter((item) => !item.checked);
+  const openItems = sortByPriority((note.items || []).filter((item) => !item.checked));
   const items = openItems.slice(0, MAX_ITEMS);
   const remaining = openItems.length - items.length;
 
@@ -258,7 +272,7 @@ function renderNoteSvgFallback(note) {
 
   const titleLines = wrapByChars(note.title || 'Untitled list', CHARS_PER_LINE).slice(0, 2);
   const MAX_ITEMS = 6;
-  const openItems = (note.items || []).filter((item) => !item.checked);
+  const openItems = sortByPriority((note.items || []).filter((item) => !item.checked));
   const items = openItems.slice(0, MAX_ITEMS);
   const remaining = openItems.length - items.length;
   const checkboxSize = 28;
