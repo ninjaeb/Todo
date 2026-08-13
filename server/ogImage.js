@@ -21,7 +21,20 @@
 
 const fs = require('fs');
 const path = require('path');
-const opentype = require('opentype.js');
+
+// Loaded defensively, same reasoning as sharp in server/index.js: a missing
+// or failed install of a dependency used only for this optional preview
+// image shouldn't crash the whole server (as a top-level
+// require('cookie-parser') once did before it was installed). If
+// opentype.js isn't available, renderNoteSvg falls back to plain <text>
+// elements below — worse (depends on the host having a matching font
+// installed) but not fatal.
+let opentype = null;
+try {
+  opentype = require('opentype.js');
+} catch (err) {
+  console.warn(`opentype.js not available (${err.message}) — og-image text will fall back to <text> elements.`);
+}
 
 function loadFont(filename) {
   const buffer = fs.readFileSync(path.join(__dirname, 'assets/fonts', filename));
@@ -29,8 +42,14 @@ function loadFont(filename) {
   return opentype.parse(arrayBuffer);
 }
 
-const REGULAR_FONT = loadFont('Roboto-Regular.woff');
-const BOLD_FONT = loadFont('Roboto-Bold.woff');
+const REGULAR_FONT = opentype ? loadFont('Roboto-Regular.woff') : null;
+const BOLD_FONT = opentype ? loadFont('Roboto-Bold.woff') : null;
+
+function escapeXml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]
+  ));
+}
 
 const NOTE_COLORS = {
   default: { bg: '#ffffff', border: '#e0e0e0' },
@@ -97,7 +116,7 @@ function truncateToWidth(font, text, fontSize, maxWidth) {
   return `${result}…`;
 }
 
-function renderNoteSvg(note) {
+function renderNoteSvgWithGlyphs(note) {
   const W = 1200;
   const H = 630;
   const PAD = 64;
@@ -173,6 +192,83 @@ function renderNoteSvg(note) {
   ${moreSvg}
   <path d="${footerPathD}" fill="#5f6368" />
 </svg>`;
+}
+
+// Fallback used only if opentype.js failed to load (see the require() at
+// the top of this file). Plain <text> with a bare font-family, which only
+// renders correctly if the host happens to have a matching font installed
+// — worse than the glyph-outline version above, but keeps the endpoint
+// working instead of 500ing or crashing the server.
+function renderNoteSvgFallback(note) {
+  const W = 1200;
+  const H = 630;
+  const PAD = 64;
+  const colors = NOTE_COLORS[note.color] || NOTE_COLORS.default;
+  const CHARS_PER_LINE = 30;
+
+  const wrapByChars = (text, maxChars) => {
+    const words = String(text).split(/\s+/).filter(Boolean);
+    const lines = [];
+    let current = '';
+    for (const word of words) {
+      const next = current ? `${current} ${word}` : word;
+      if (next.length > maxChars && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = next;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  };
+
+  const titleLines = wrapByChars(note.title || 'Untitled list', CHARS_PER_LINE).slice(0, 2);
+  const MAX_ITEMS = 6;
+  const items = (note.items || []).slice(0, MAX_ITEMS);
+  const remaining = (note.items || []).length - items.length;
+  const checkboxSize = 28;
+  const textX = PAD + checkboxSize + 20;
+
+  let y = PAD + 42 + (titleLines.length - 1) * 62 + 36;
+
+  const titleSvg = titleLines
+    .map((line, i) => `<text x="${PAD}" y="${PAD + 42 + i * 62}" font-family="Arial, sans-serif" font-weight="bold" font-size="52" fill="#202124">${escapeXml(line)}</text>`)
+    .join('\n');
+
+  const itemsSvg = items
+    .map((item) => {
+      const text = wrapByChars(item.text || '(empty item)', 44)[0];
+      const checked = !!item.checked;
+      const boxY = y - checkboxSize + 6;
+      const checkbox = checked
+        ? `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="#1a73e8" />
+           <path d="M ${PAD + 6} ${boxY + 14} L ${PAD + 12} ${boxY + 20} L ${PAD + 22} ${boxY + 8}" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
+        : `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="none" stroke="#5f6368" stroke-width="2.5" />`;
+      const decoration = checked ? 'line-through' : 'none';
+      const textSvg = `<text x="${textX}" y="${y}" font-family="Arial, sans-serif" font-size="32" fill="${checked ? '#5f6368' : '#202124'}" text-decoration="${decoration}">${escapeXml(text)}</text>`;
+      const row = checkbox + textSvg;
+      y += 48;
+      return row;
+    })
+    .join('\n');
+
+  const moreSvg = remaining > 0
+    ? `<text x="${textX}" y="${y}" font-family="Arial, sans-serif" font-size="26" fill="#5f6368">+${remaining} more</text>`
+    : '';
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <rect width="${W}" height="${H}" fill="${colors.bg}" />
+  <rect x="2" y="2" width="${W - 4}" height="${H - 4}" fill="none" stroke="${colors.border}" stroke-width="4" />
+  ${titleSvg}
+  ${itemsSvg}
+  ${moreSvg}
+  <text x="${W - PAD}" y="${H - 36}" text-anchor="end" font-family="Arial, sans-serif" font-size="26" fill="#5f6368">Todo Keep</text>
+</svg>`;
+}
+
+function renderNoteSvg(note) {
+  return opentype ? renderNoteSvgWithGlyphs(note) : renderNoteSvgFallback(note);
 }
 
 module.exports = { renderNoteSvg };
