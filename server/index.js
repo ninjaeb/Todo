@@ -10,6 +10,18 @@ const db = require('./db');
 const adminAuth = require('./adminAuth');
 const { renderNoteSvg } = require('./ogImage');
 
+// Loaded defensively: WhatsApp/Facebook's crawler needs a real raster image
+// (SVG doesn't render as a preview there), but a missing/failed native
+// dependency shouldn't crash the whole server the way a top-level
+// require('cookie-parser') did before it was installed — if sharp isn't
+// available, og-image.png just falls back to serving SVG instead of 500ing.
+let sharp = null;
+try {
+  sharp = require('sharp');
+} catch (err) {
+  console.warn(`sharp not available (${err.message}) — og-image.png will fall back to SVG.`);
+}
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -42,6 +54,7 @@ function renderBoardHtmlWithMeta({ title, description, imageUrl, pageUrl }) {
     `<meta property="og:description" content="${escapeHtmlAttr(description)}" />`,
     `<meta property="og:url" content="${escapeHtmlAttr(pageUrl)}" />`,
     imageUrl ? `<meta property="og:image" content="${escapeHtmlAttr(imageUrl)}" />` : '',
+    imageUrl ? `<meta property="og:image:type" content="image/png" />` : '',
     imageUrl ? `<meta property="og:image:width" content="1200" />` : '',
     imageUrl ? `<meta property="og:image:height" content="630" />` : '',
     `<meta name="twitter:card" content="${imageUrl ? 'summary_large_image' : 'summary'}" />`,
@@ -295,7 +308,10 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'admin.html'));
 });
 
-// SVG preview image for a single note (used as its Open Graph image).
+// SVG preview image for a single note. Kept as its own endpoint (some
+// platforms do render SVG fine, and it's handy standalone), but the meta
+// tags point at the .png endpoint below since that's what actually needs
+// to work broadly (WhatsApp, Facebook, etc. require a raster image).
 // Regenerated on every request from live data — the list can change, and
 // this app has no page-caching layer, so "no-cache" keeps it honest rather
 // than showing a stale checklist in a chat's link preview.
@@ -309,6 +325,39 @@ app.get(
     res.setHeader('Cache-Control', 'no-cache');
     res.send(renderNoteSvg(note));
   }
+);
+
+// PNG version of the same preview image — rasterized from the SVG via
+// sharp. If sharp failed to load (see the require() at the top of this
+// file), this falls back to serving the SVG rather than 500ing; that won't
+// fix a platform that needs PNG specifically, but keeps the endpoint (and
+// the rest of the app) working either way.
+app.get(
+  '/api/boards/:boardId/notes/:noteId/og-image.png',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const note = req.board.notes.find((n) => n.id === req.params.noteId);
+    if (!note) return res.status(404).end();
+    const svg = renderNoteSvg(note);
+
+    if (!sharp) {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.send(svg);
+    }
+
+    try {
+      const png = await sharp(Buffer.from(svg)).png().toBuffer();
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.send(png);
+    } catch (err) {
+      console.error('Failed to rasterize og-image to PNG, falling back to SVG:', err);
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.send(svg);
+    }
+  })
 );
 
 // A note's shareable link: opens the full board with that note's detail
@@ -336,7 +385,7 @@ app.get('/board/:boardId/note/:noteId', async (req, res, next) => {
       renderBoardHtmlWithMeta({
         title: note.title || 'Untitled list',
         description: summarizeItems(note.items),
-        imageUrl: `${baseUrl}/api/boards/${board.id}/notes/${note.id}/og-image.svg`,
+        imageUrl: `${baseUrl}/api/boards/${board.id}/notes/${note.id}/og-image.png`,
         pageUrl: `${baseUrl}/board/${board.id}/note/${note.id}`,
       })
     );
