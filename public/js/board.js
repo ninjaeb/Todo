@@ -304,17 +304,18 @@ function buildNoteElement(note) {
   return el;
 }
 
-// Appends a version token (the note's last-updated time) to its shareable
-// link. WhatsApp/Facebook cache link previews per exact URL with no public
-// way to force a re-crawl — without this, sharing the same note link again
-// after changing something (like an item's priority) would keep showing
-// whatever preview they cached from the first share. Changing the URL on
-// every share makes each one look unseen to their crawler, so the preview
-// (title, description, og-image) is always generated fresh from current
-// data instead of reused from a stale cache.
+// Appends a version token to the note's shareable link, using the current
+// time at the moment of sharing (not the note's last-updated time) so
+// EVERY click produces a brand-new URL, even if nothing changed since the
+// last share. WhatsApp/Facebook cache link previews per exact URL with no
+// public way to force a re-crawl — including a stuck cached URL that was
+// crawled before a since-fixed bug went live, which a content-based
+// version token can't escape (same content -> same URL -> still the old
+// cached preview). A fresh token on every click guarantees each share is a
+// URL their crawler has never seen, so the preview is always generated
+// live from current data.
 function buildNoteShareUrl(note) {
-  const version = note.updatedAt ? new Date(note.updatedAt).getTime() : Date.now();
-  return `${window.location.origin}/board/${boardId}/note/${note.id}?v=${version}`;
+  return `${window.location.origin}/board/${boardId}/note/${note.id}?v=${Date.now()}`;
 }
 
 function openNoteDetail(noteId, { updateUrl = true } = {}) {
