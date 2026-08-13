@@ -246,7 +246,7 @@ function openNoteDetail(noteId, { updateUrl = true } = {}) {
   container.appendChild(state.detailEl);
   state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
   const noteUrl = `${window.location.origin}/board/${boardId}/note/${noteId}`;
-  document.getElementById('whatsapp-note-share-btn').href = `https://wa.me/?text=${encodeURIComponent(noteUrl)}`;
+  whatsappNoteShareUrl = `https://wa.me/?text=${encodeURIComponent(noteUrl)}`;
   if (updateUrl) history.pushState({ noteId }, '', `/board/${boardId}/note/${noteId}`);
 }
 
@@ -501,6 +501,11 @@ noteDetailModal.addEventListener('click', (e) => {
   if (e.target === noteDetailModal) closeNoteDetail();
 });
 
+let whatsappNoteShareUrl = '';
+document.getElementById('whatsapp-note-share-btn').addEventListener('click', () => {
+  if (whatsappNoteShareUrl) window.open(whatsappNoteShareUrl, '_blank', 'noopener');
+});
+
 document.getElementById('copy-note-link-btn').addEventListener('click', async () => {
   if (!state.openNoteId) return;
   const url = `${window.location.origin}/board/${boardId}/note/${state.openNoteId}`;
@@ -529,10 +534,14 @@ const shareModal = document.getElementById('share-modal');
 const shareLinkInput = document.getElementById('share-link-input');
 
 const whatsappShareBtn = document.getElementById('whatsapp-share-btn');
+let whatsappShareUrl = '';
+whatsappShareBtn.addEventListener('click', () => {
+  if (whatsappShareUrl) window.open(whatsappShareUrl, '_blank', 'noopener');
+});
 
 document.getElementById('share-btn').addEventListener('click', () => {
   shareLinkInput.value = window.location.href;
-  whatsappShareBtn.href = `https://wa.me/?text=${encodeURIComponent(shareLinkInput.value)}`;
+  whatsappShareUrl = `https://wa.me/?text=${encodeURIComponent(shareLinkInput.value)}`;
   shareModal.hidden = false;
   shareLinkInput.select();
 });
