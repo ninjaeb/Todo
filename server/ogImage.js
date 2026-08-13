@@ -129,7 +129,6 @@ function truncateToWidth(font, text, fontSize, maxWidth) {
 
 function renderNoteSvgWithGlyphs(note) {
   const W = 1200;
-  const H = 630;
   const PAD = 64;
   const colors = NOTE_COLORS[note.color] || NOTE_COLORS.default;
   const contentWidth = W - PAD * 2;
@@ -138,7 +137,10 @@ function renderNoteSvgWithGlyphs(note) {
   const titleLineHeight = 62;
   const titleLines = wrapByWidth(BOLD_FONT, note.title || 'Untitled list', titleFontSize, contentWidth).slice(0, 2);
 
-  const MAX_ITEMS = 6;
+  // Show the whole list rather than truncating to a fixed count — the
+  // image height grows to fit, capped at MAX_ITEMS so a huge list doesn't
+  // produce an unreasonably tall image.
+  const MAX_ITEMS = 40;
   const items = (note.items || []).slice(0, MAX_ITEMS);
   const remaining = (note.items || []).length - items.length;
 
@@ -148,7 +150,11 @@ function renderNoteSvgWithGlyphs(note) {
   const textX = PAD + checkboxSize + 20;
   const itemTextMaxWidth = W - PAD - textX;
 
-  let y = PAD + titleFontSize * 0.8 + (titleLines.length - 1) * titleLineHeight + 60;
+  const titleBlockHeight = PAD + titleFontSize * 0.8 + (titleLines.length - 1) * titleLineHeight + 60;
+  const listHeight = items.length * itemLineHeight + (remaining > 0 ? itemLineHeight : 0);
+  const H = Math.max(630, Math.round(titleBlockHeight + listHeight + 90));
+
+  let y = titleBlockHeight;
 
   const titlePaths = titleLines
     .map((line, i) => {
