@@ -70,11 +70,12 @@ function renderBoardHtmlWithMeta({ title, description, imageUrl, pageUrl }) {
     .replace('</head>', `${tags}\n</head>`);
 }
 
-function summarizeItems(items) {
-  if (!items || items.length === 0) return 'An empty checklist on Todo Keep.';
+function summarizeItems(title, items) {
+  if (!items || items.length === 0) return `Progress of ${title}\nAn empty checklist on Todo Keep.`;
+  const total = items.length;
   const done = items.filter((i) => i.checked).length;
-  const remaining = items.length - done;
-  return `${remaining} to do, ${done} completed on Todo Keep.`;
+  const remaining = total - done;
+  return `Progress of ${title}\n${remaining}/${total} pending discussion/todo\n${done}/${total} completed`;
 }
 
 app.use(express.json());
@@ -414,7 +415,7 @@ app.get('/board/:boardId/note/:noteId', async (req, res, next) => {
     res.send(
       renderBoardHtmlWithMeta({
         title: note.title || 'Untitled list',
-        description: summarizeItems(note.items),
+        description: summarizeItems(note.title || 'Untitled list', note.items),
         imageUrl: `${baseUrl}/api/boards/${board.id}/notes/${note.id}/og-image.png`,
         pageUrl: `${baseUrl}/board/${board.id}/note/${note.id}`,
       })
