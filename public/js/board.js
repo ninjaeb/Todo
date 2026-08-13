@@ -304,6 +304,19 @@ function buildNoteElement(note) {
   return el;
 }
 
+// Appends a version token (the note's last-updated time) to its shareable
+// link. WhatsApp/Facebook cache link previews per exact URL with no public
+// way to force a re-crawl — without this, sharing the same note link again
+// after changing something (like an item's priority) would keep showing
+// whatever preview they cached from the first share. Changing the URL on
+// every share makes each one look unseen to their crawler, so the preview
+// (title, description, og-image) is always generated fresh from current
+// data instead of reused from a stale cache.
+function buildNoteShareUrl(note) {
+  const version = note.updatedAt ? new Date(note.updatedAt).getTime() : Date.now();
+  return `${window.location.origin}/board/${boardId}/note/${note.id}?v=${version}`;
+}
+
 function openNoteDetail(noteId, { updateUrl = true } = {}) {
   const note = state.board.notes.find((n) => n.id === noteId);
   if (!note) return;
@@ -317,8 +330,6 @@ function openNoteDetail(noteId, { updateUrl = true } = {}) {
   state.detailEl = buildNoteElement(note);
   container.appendChild(state.detailEl);
   state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
-  const noteUrl = `${window.location.origin}/board/${boardId}/note/${noteId}`;
-  whatsappNoteShareUrl = `https://wa.me/?text=${encodeURIComponent(noteUrl)}`;
   if (updateUrl) history.pushState({ noteId }, '', `/board/${boardId}/note/${noteId}`);
 }
 
@@ -594,14 +605,16 @@ noteDetailModal.addEventListener('click', (e) => {
   if (e.target === noteDetailModal) closeNoteDetail();
 });
 
-let whatsappNoteShareUrl = '';
 document.getElementById('whatsapp-note-share-btn').addEventListener('click', () => {
-  if (whatsappNoteShareUrl) window.open(whatsappNoteShareUrl, '_blank', 'noopener');
+  const note = state.board.notes.find((n) => n.id === state.openNoteId);
+  if (!note) return;
+  window.open(`https://wa.me/?text=${encodeURIComponent(buildNoteShareUrl(note))}`, '_blank', 'noopener');
 });
 
 document.getElementById('copy-note-link-btn').addEventListener('click', async () => {
-  if (!state.openNoteId) return;
-  const url = `${window.location.origin}/board/${boardId}/note/${state.openNoteId}`;
+  const note = state.board.notes.find((n) => n.id === state.openNoteId);
+  if (!note) return;
+  const url = buildNoteShareUrl(note);
   const btn = document.getElementById('copy-note-link-btn');
   const original = btn.textContent;
   try {
