@@ -73,11 +73,8 @@ function renderBoardHtmlWithMeta({ title, description, imageUrl, pageUrl }) {
 function summarizeItems(items) {
   if (!items || items.length === 0) return 'An empty checklist on Todo Keep.';
   const done = items.filter((i) => i.checked).length;
-  const preview = items
-    .slice(0, 5)
-    .map((i) => (i.checked ? '✓ ' : '• ') + (i.text || '(empty item)'))
-    .join('  ·  ');
-  return `${done}/${items.length} done — ${preview}${items.length > 5 ? '…' : ''}`;
+  const remaining = items.length - done;
+  return `${remaining} to do, ${done} completed on Todo Keep.`;
 }
 
 app.use(express.json());

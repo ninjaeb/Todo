@@ -139,10 +139,13 @@ function renderNoteSvgWithGlyphs(note) {
 
   // Show the whole list rather than truncating to a fixed count — the
   // image height grows to fit, capped at MAX_ITEMS so a huge list doesn't
-  // produce an unreasonably tall image.
+  // produce an unreasonably tall image. Completed items are left out
+  // entirely: the preview is meant to show what's left to do, not a record
+  // of what's already done.
   const MAX_ITEMS = 40;
-  const items = (note.items || []).slice(0, MAX_ITEMS);
-  const remaining = (note.items || []).length - items.length;
+  const openItems = (note.items || []).filter((item) => !item.checked);
+  const items = openItems.slice(0, MAX_ITEMS);
+  const remaining = openItems.length - items.length;
 
   const itemFontSize = 32;
   const itemLineHeight = 48;
@@ -242,8 +245,9 @@ function renderNoteSvgFallback(note) {
 
   const titleLines = wrapByChars(note.title || 'Untitled list', CHARS_PER_LINE).slice(0, 2);
   const MAX_ITEMS = 6;
-  const items = (note.items || []).slice(0, MAX_ITEMS);
-  const remaining = (note.items || []).length - items.length;
+  const openItems = (note.items || []).filter((item) => !item.checked);
+  const items = openItems.slice(0, MAX_ITEMS);
+  const remaining = openItems.length - items.length;
   const checkboxSize = 28;
   const textX = PAD + checkboxSize + 20;
 

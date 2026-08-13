@@ -614,6 +614,28 @@ button:hover { filter: brightness(1.1); }
   font-size: 14px;
 }
 
+.whatsapp-share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #25d366;
+  color: #fff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.whatsapp-share-btn:hover { filter: brightness(1.05); }
+
+#whatsapp-share-btn {
+  margin-bottom: 12px;
+}
+
 .modal.note-detail {
   max-width: 900px;
   width: 92vw;

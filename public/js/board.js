@@ -245,6 +245,8 @@ function openNoteDetail(noteId, { updateUrl = true } = {}) {
   state.detailEl = buildNoteElement(note);
   container.appendChild(state.detailEl);
   state.detailEl.querySelectorAll('textarea').forEach(autosizeTextarea);
+  const noteUrl = `${window.location.origin}/board/${boardId}/note/${noteId}`;
+  document.getElementById('whatsapp-note-share-btn').href = `https://wa.me/?text=${encodeURIComponent(noteUrl)}`;
   if (updateUrl) history.pushState({ noteId }, '', `/board/${boardId}/note/${noteId}`);
 }
 
@@ -526,8 +528,11 @@ window.addEventListener('popstate', () => {
 const shareModal = document.getElementById('share-modal');
 const shareLinkInput = document.getElementById('share-link-input');
 
+const whatsappShareBtn = document.getElementById('whatsapp-share-btn');
+
 document.getElementById('share-btn').addEventListener('click', () => {
   shareLinkInput.value = window.location.href;
+  whatsappShareBtn.href = `https://wa.me/?text=${encodeURIComponent(shareLinkInput.value)}`;
   shareModal.hidden = false;
   shareLinkInput.select();
 });
