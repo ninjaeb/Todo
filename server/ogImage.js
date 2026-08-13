@@ -148,7 +148,7 @@ function renderNoteSvgWithGlyphs(note) {
   const textX = PAD + checkboxSize + 20;
   const itemTextMaxWidth = W - PAD - textX;
 
-  let y = PAD + titleFontSize * 0.8 + (titleLines.length - 1) * titleLineHeight + 36;
+  let y = PAD + titleFontSize * 0.8 + (titleLines.length - 1) * titleLineHeight + 60;
 
   const titlePaths = titleLines
     .map((line, i) => {
