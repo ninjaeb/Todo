@@ -456,6 +456,44 @@ button:hover { filter: brightness(1.1); }
 .priority-btn[data-priority="medium"] { background: #f5a623; border-color: #f5a623; }
 .priority-btn[data-priority="high"] { background: #e0483e; border-color: #e0483e; }
 
+.priority-menu {
+  position: fixed;
+  z-index: 1000;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  padding: 6px;
+  min-width: 150px;
+}
+.priority-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.priority-menu-item:hover { background: var(--input-bg); filter: none; }
+.priority-menu-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+}
+.priority-menu-dot[data-priority="low"] { background: #34a853; border-color: #34a853; }
+.priority-menu-dot[data-priority="medium"] { background: #f5a623; border-color: #f5a623; }
+.priority-menu-dot[data-priority="high"] { background: #e0483e; border-color: #e0483e; }
+
 .note-item .item-text {
   flex: 1;
   min-width: 0;

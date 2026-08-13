@@ -51,6 +51,12 @@ function escapeXml(str) {
   ));
 }
 
+const PRIORITY_COLORS = {
+  high: '#e0483e',
+  medium: '#f5a623',
+  low: '#34a853',
+};
+
 const NOTE_COLORS = {
   default: { bg: '#ffffff', border: '#e0e0e0' },
   red: { bg: '#fbe1df', border: '#f2b8b5' },
@@ -150,7 +156,9 @@ function renderNoteSvgWithGlyphs(note) {
   const itemFontSize = 32;
   const itemLineHeight = 48;
   const checkboxSize = 28;
-  const textX = PAD + checkboxSize + 20;
+  const priorityDotSize = 16;
+  const checkboxX = PAD + priorityDotSize + 12;
+  const textX = checkboxX + checkboxSize + 20;
   const itemTextMaxWidth = W - PAD - textX;
 
   const titleBlockHeight = PAD + titleFontSize * 0.8 + (titleLines.length - 1) * titleLineHeight + 60;
@@ -171,16 +179,21 @@ function renderNoteSvgWithGlyphs(note) {
       const text = truncateToWidth(REGULAR_FONT, item.text || '(empty item)', itemFontSize, itemTextMaxWidth);
       const checked = !!item.checked;
       const boxY = y - checkboxSize + 6;
+      const priorityColor = PRIORITY_COLORS[item.priority];
+      const priorityDotY = boxY + checkboxSize / 2;
+      const priorityDot = priorityColor
+        ? `<circle cx="${PAD + priorityDotSize / 2}" cy="${priorityDotY}" r="${priorityDotSize / 2}" fill="${priorityColor}" />`
+        : '';
       const checkbox = checked
-        ? `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="#1a73e8" />
-           <path d="M ${PAD + 6} ${boxY + 14} L ${PAD + 12} ${boxY + 20} L ${PAD + 22} ${boxY + 8}" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
-        : `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="none" stroke="#5f6368" stroke-width="2.5" />`;
+        ? `<rect x="${checkboxX}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="#1a73e8" />
+           <path d="M ${checkboxX + 6} ${boxY + 14} L ${checkboxX + 12} ${boxY + 20} L ${checkboxX + 22} ${boxY + 8}" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
+        : `<rect x="${checkboxX}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="none" stroke="#5f6368" stroke-width="2.5" />`;
       const { d, width } = textToPath(REGULAR_FONT, text, textX, y, itemFontSize);
       const strike = checked
         ? `<line x1="${textX}" y1="${y - itemFontSize * 0.32}" x2="${textX + width}" y2="${y - itemFontSize * 0.32}" stroke="#5f6368" stroke-width="2" />`
         : '';
       const textPath = `<path d="${d}" fill="${checked ? '#5f6368' : '#202124'}" />${strike}`;
-      const row = checkbox + textPath;
+      const row = priorityDot + checkbox + textPath;
       y += itemLineHeight;
       return row;
     })
@@ -249,7 +262,9 @@ function renderNoteSvgFallback(note) {
   const items = openItems.slice(0, MAX_ITEMS);
   const remaining = openItems.length - items.length;
   const checkboxSize = 28;
-  const textX = PAD + checkboxSize + 20;
+  const priorityDotSize = 16;
+  const checkboxX = PAD + priorityDotSize + 12;
+  const textX = checkboxX + checkboxSize + 20;
 
   let y = PAD + 42 + (titleLines.length - 1) * 62 + 36;
 
@@ -262,13 +277,17 @@ function renderNoteSvgFallback(note) {
       const text = wrapByChars(item.text || '(empty item)', 44)[0];
       const checked = !!item.checked;
       const boxY = y - checkboxSize + 6;
+      const priorityColor = PRIORITY_COLORS[item.priority];
+      const priorityDot = priorityColor
+        ? `<circle cx="${PAD + priorityDotSize / 2}" cy="${boxY + checkboxSize / 2}" r="${priorityDotSize / 2}" fill="${priorityColor}" />`
+        : '';
       const checkbox = checked
-        ? `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="#1a73e8" />
-           <path d="M ${PAD + 6} ${boxY + 14} L ${PAD + 12} ${boxY + 20} L ${PAD + 22} ${boxY + 8}" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
-        : `<rect x="${PAD}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="none" stroke="#5f6368" stroke-width="2.5" />`;
+        ? `<rect x="${checkboxX}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="#1a73e8" />
+           <path d="M ${checkboxX + 6} ${boxY + 14} L ${checkboxX + 12} ${boxY + 20} L ${checkboxX + 22} ${boxY + 8}" stroke="white" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round" />`
+        : `<rect x="${checkboxX}" y="${boxY}" width="${checkboxSize}" height="${checkboxSize}" rx="6" fill="none" stroke="#5f6368" stroke-width="2.5" />`;
       const decoration = checked ? 'line-through' : 'none';
       const textSvg = `<text x="${textX}" y="${y}" font-family="Arial, sans-serif" font-size="32" fill="${checked ? '#5f6368' : '#202124'}" text-decoration="${decoration}">${escapeXml(text)}</text>`;
-      const row = checkbox + textSvg;
+      const row = priorityDot + checkbox + textSvg;
       y += 48;
       return row;
     })

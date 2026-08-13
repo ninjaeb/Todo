@@ -1,15 +1,71 @@
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 
-const PRIORITY_CYCLE = [null, 'low', 'medium', 'high'];
-function nextPriority(current) {
-  const idx = PRIORITY_CYCLE.indexOf(current || null);
-  return PRIORITY_CYCLE[(idx + 1) % PRIORITY_CYCLE.length];
-}
+const PRIORITY_OPTIONS = [
+  { value: 'high', label: 'Important', dotClass: 'high' },
+  { value: 'medium', label: 'Medium', dotClass: 'medium' },
+  { value: 'low', label: 'Low', dotClass: 'low' },
+  { value: null, label: 'None', dotClass: 'none' },
+];
+
 function priorityRank(priority) {
   return { high: 3, medium: 2, low: 1 }[priority] || 0;
 }
 function priorityLabel(priority) {
-  return priority ? `Priority: ${priority[0].toUpperCase()}${priority.slice(1)} — click to change` : 'No priority — click to set';
+  const opt = PRIORITY_OPTIONS.find((o) => o.value === (priority || null));
+  return `Priority: ${opt.label} — click to change`;
+}
+
+// Single shared popup menu (reused for every item's priority button) for
+// picking a priority directly, rather than cycling through values on
+// repeated clicks.
+let priorityMenuEl = null;
+function closePriorityMenu() {
+  if (priorityMenuEl) {
+    priorityMenuEl.remove();
+    priorityMenuEl = null;
+    document.removeEventListener('mousedown', handlePriorityMenuOutsideClick, true);
+    document.removeEventListener('keydown', handlePriorityMenuEscape, true);
+  }
+}
+function handlePriorityMenuOutsideClick(e) {
+  if (priorityMenuEl && !priorityMenuEl.contains(e.target)) closePriorityMenu();
+}
+function handlePriorityMenuEscape(e) {
+  if (e.key === 'Escape') closePriorityMenu();
+}
+function openPriorityMenu(anchorBtn, onSelect) {
+  closePriorityMenu();
+  const menu = document.createElement('div');
+  menu.className = 'priority-menu';
+  PRIORITY_OPTIONS.forEach((opt) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'priority-menu-item';
+    item.innerHTML = `<span class="priority-menu-dot" data-priority="${opt.dotClass}"></span>${opt.label}`;
+    item.addEventListener('click', () => {
+      closePriorityMenu();
+      onSelect(opt.value);
+    });
+    menu.appendChild(item);
+  });
+  document.body.appendChild(menu);
+
+  const rect = anchorBtn.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  let left = rect.left;
+  let top = rect.bottom + 4;
+  if (left + menuRect.width > window.innerWidth - 8) left = window.innerWidth - menuRect.width - 8;
+  if (top + menuRect.height > window.innerHeight - 8) top = rect.top - menuRect.height - 4;
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+
+  priorityMenuEl = menu;
+  // Deferred so the click that opened the menu doesn't immediately close it
+  // via the same mousedown bubbling to document.
+  setTimeout(() => {
+    document.addEventListener('mousedown', handlePriorityMenuOutsideClick, true);
+    document.addEventListener('keydown', handlePriorityMenuEscape, true);
+  }, 0);
 }
 
 // Path is either /board/:boardId or /board/:boardId/note/:noteId (a note's
@@ -401,10 +457,13 @@ function buildItemRow(note, item, el) {
   priorityBtn.className = 'priority-btn';
   priorityBtn.dataset.priority = item.priority || 'none';
   priorityBtn.title = priorityLabel(item.priority);
-  priorityBtn.addEventListener('click', () => {
-    item.priority = nextPriority(item.priority);
-    updateNoteElement(el, note);
-    putNote(note.id, { items: note.items });
+  priorityBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPriorityMenu(priorityBtn, (value) => {
+      item.priority = value;
+      updateNoteElement(el, note);
+      putNote(note.id, { items: note.items });
+    });
   });
 
   const text = document.createElement('textarea');
