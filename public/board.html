@@ -20,6 +20,7 @@
     <div class="topbar-right">
       <span id="presence" class="presence" title="People currently viewing this board">👀 1</span>
       <button id="theme-toggle" class="theme-toggle" type="button" title="Toggle theme">🌙</button>
+      <button id="trash-btn" class="theme-toggle" type="button" title="Trash">🗑️</button>
       <button id="share-btn" class="share-btn">Share</button>
     </div>
   </header>
@@ -43,6 +44,16 @@
         <button id="copy-link-btn">Copy</button>
       </div>
       <button id="close-modal-btn" class="secondary">Done</button>
+    </div>
+  </div>
+
+  <div id="trash-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <h2>Trash</h2>
+      <p>Deleted lists stay here until you restore them or delete them forever.</p>
+      <ul id="trash-list" class="trash-list"></ul>
+      <p id="trash-empty" class="join-status" hidden>Nothing in the trash.</p>
+      <button id="close-trash-btn" class="secondary">Done</button>
     </div>
   </div>
 

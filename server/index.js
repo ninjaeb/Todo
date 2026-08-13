@@ -230,7 +230,7 @@ app.put(
   })
 );
 
-// Delete a note
+// Delete a note (soft delete — it moves to the board's trash, see below)
 app.delete(
   '/api/boards/:boardId/notes/:noteId',
   requireBoard,
@@ -238,6 +238,39 @@ app.delete(
     const deleted = await db.deleteNote(req.board.id, req.params.noteId);
     if (!deleted) return res.status(404).json({ error: 'Note not found' });
     io.to(req.board.id).emit('note:deleted', { id: req.params.noteId });
+    res.status(204).end();
+  })
+);
+
+// List a board's trashed (soft-deleted) notes
+app.get(
+  '/api/boards/:boardId/trash',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const notes = await db.listTrashedNotes(req.board.id);
+    res.json(notes);
+  })
+);
+
+// Restore a note out of the trash
+app.post(
+  '/api/boards/:boardId/trash/:noteId/restore',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const note = await db.restoreNote(req.board.id, req.params.noteId);
+    if (!note) return res.status(404).json({ error: 'Note not found in trash' });
+    io.to(req.board.id).emit('note:created', note); // reappears on the board like a fresh note
+    res.json(note);
+  })
+);
+
+// Permanently delete a trashed note
+app.delete(
+  '/api/boards/:boardId/trash/:noteId',
+  requireBoard,
+  asyncRoute(async (req, res) => {
+    const purged = await db.purgeNote(req.board.id, req.params.noteId);
+    if (!purged) return res.status(404).json({ error: 'Note not found in trash' });
     res.status(204).end();
   })
 );

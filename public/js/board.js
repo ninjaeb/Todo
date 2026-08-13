@@ -553,6 +553,78 @@ shareModal.addEventListener('click', (e) => {
   if (e.target === shareModal) shareModal.hidden = true;
 });
 
+// ---------- Trash ----------
+const trashModal = document.getElementById('trash-modal');
+const trashList = document.getElementById('trash-list');
+const trashEmpty = document.getElementById('trash-empty');
+
+async function loadTrash() {
+  trashList.innerHTML = '';
+  let notes = [];
+  try {
+    notes = await api(`/api/boards/${boardId}/trash`);
+  } catch (err) {
+    console.error(err);
+  }
+  trashEmpty.hidden = notes.length > 0;
+  notes.forEach((note) => {
+    const li = document.createElement('li');
+
+    const title = document.createElement('span');
+    title.className = 'trash-item-title';
+    title.textContent = note.title || 'Untitled list';
+    li.appendChild(title);
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'restore-note';
+    restoreBtn.textContent = 'Restore';
+    restoreBtn.addEventListener('click', async () => {
+      try {
+        const restored = await api(`/api/boards/${boardId}/trash/${note.id}/restore`, { method: 'POST' });
+        mergeNote(restored);
+        renderAll();
+        await loadTrash();
+      } catch (err) {
+        alert('Could not restore this list.');
+        console.error(err);
+      }
+    });
+    li.appendChild(restoreBtn);
+
+    const purgeBtn = document.createElement('button');
+    purgeBtn.type = 'button';
+    purgeBtn.className = 'purge-note';
+    purgeBtn.textContent = 'Delete forever';
+    purgeBtn.addEventListener('click', async () => {
+      if (!confirm(`Permanently delete "${note.title || 'Untitled list'}"? This cannot be undone.`)) return;
+      try {
+        await api(`/api/boards/${boardId}/trash/${note.id}`, { method: 'DELETE' });
+        await loadTrash();
+      } catch (err) {
+        alert('Could not delete this list.');
+        console.error(err);
+      }
+    });
+    li.appendChild(purgeBtn);
+
+    trashList.appendChild(li);
+  });
+}
+
+document.getElementById('trash-btn').addEventListener('click', () => {
+  trashModal.hidden = false;
+  loadTrash();
+});
+
+document.getElementById('close-trash-btn').addEventListener('click', () => {
+  trashModal.hidden = true;
+});
+
+trashModal.addEventListener('click', (e) => {
+  if (e.target === trashModal) trashModal.hidden = true;
+});
+
 // ---------- Realtime ----------
 const socket = io();
 

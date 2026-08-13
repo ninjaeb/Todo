@@ -75,12 +75,22 @@ async function initSchema() {
       items JSON NOT NULL,
       pinned TINYINT(1) NOT NULL DEFAULT 0,
       position INT NOT NULL DEFAULT 0,
+      deleted_at DATETIME(3) NULL DEFAULT NULL,
       created_at DATETIME(3) NOT NULL,
       updated_at DATETIME(3) NOT NULL,
       CONSTRAINT fk_notes_board FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
       INDEX idx_notes_board (board_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
+
+  const [notesDeletedAtColumn] = await pool.query(
+    `SELECT COLUMN_NAME FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'notes' AND COLUMN_NAME = 'deleted_at'`,
+    [DB_NAME]
+  );
+  if (notesDeletedAtColumn.length === 0) {
+    await pool.query('ALTER TABLE notes ADD COLUMN deleted_at DATETIME(3) NULL DEFAULT NULL');
+  }
 }
 
 function rowToBoard(boardRow, noteRows) {
@@ -107,6 +117,7 @@ function rowToNote(row) {
     items: typeof row.items === 'string' ? JSON.parse(row.items) : row.items,
     pinned: !!row.pinned,
     position: row.position,
+    deletedAt: row.deleted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -186,7 +197,7 @@ async function getBoard(boardId, { includeDeleted = false } = {}) {
   );
   if (boardRows.length === 0) return null;
   const [noteRows] = await pool.query(
-    'SELECT * FROM notes WHERE board_id = ? ORDER BY pinned DESC, created_at DESC',
+    'SELECT * FROM notes WHERE board_id = ? AND deleted_at IS NULL ORDER BY pinned DESC, created_at DESC',
     [boardId]
   );
   return rowToBoard(boardRows[0], noteRows);
@@ -220,7 +231,10 @@ async function createNote(boardId, note) {
 }
 
 async function updateNote(boardId, noteId, fields) {
-  const [rows] = await pool.query('SELECT * FROM notes WHERE id = ? AND board_id = ?', [noteId, boardId]);
+  const [rows] = await pool.query('SELECT * FROM notes WHERE id = ? AND board_id = ? AND deleted_at IS NULL', [
+    noteId,
+    boardId,
+  ]);
   if (rows.length === 0) return null;
   const existing = rowToNote(rows[0]);
 
@@ -243,11 +257,47 @@ async function updateNote(boardId, noteId, fields) {
   return { id: noteId, ...next, createdAt: existing.createdAt, updatedAt: now };
 }
 
+// Soft-deletes a note: it disappears from the board but stays recoverable
+// from that board's trash, rather than being gone the moment someone
+// clicks delete.
 async function deleteNote(boardId, noteId) {
-  const [result] = await pool.query('DELETE FROM notes WHERE id = ? AND board_id = ?', [noteId, boardId]);
+  const now = new Date();
+  const [result] = await pool.query(
+    'UPDATE notes SET deleted_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NULL',
+    [now, noteId, boardId]
+  );
   if (result.affectedRows === 0) return false;
-  await pool.query('UPDATE boards SET updated_at = ? WHERE id = ?', [new Date(), boardId]);
+  await pool.query('UPDATE boards SET updated_at = ? WHERE id = ?', [now, boardId]);
   return true;
+}
+
+async function restoreNote(boardId, noteId) {
+  const now = new Date();
+  const [result] = await pool.query(
+    'UPDATE notes SET deleted_at = NULL, updated_at = ? WHERE id = ? AND board_id = ? AND deleted_at IS NOT NULL',
+    [now, noteId, boardId]
+  );
+  if (result.affectedRows === 0) return null;
+  const [rows] = await pool.query('SELECT * FROM notes WHERE id = ? AND board_id = ?', [noteId, boardId]);
+  await pool.query('UPDATE boards SET updated_at = ? WHERE id = ?', [now, boardId]);
+  return rows.length ? rowToNote(rows[0]) : null;
+}
+
+// Irreversibly removes a trashed note.
+async function purgeNote(boardId, noteId) {
+  const [result] = await pool.query('DELETE FROM notes WHERE id = ? AND board_id = ? AND deleted_at IS NOT NULL', [
+    noteId,
+    boardId,
+  ]);
+  return result.affectedRows > 0;
+}
+
+async function listTrashedNotes(boardId) {
+  const [rows] = await pool.query(
+    'SELECT * FROM notes WHERE board_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC',
+    [boardId]
+  );
+  return rows.map(rowToNote);
 }
 
 async function searchBoardsByTitle(query, limit = 10) {
@@ -271,5 +321,8 @@ module.exports = {
   createNote,
   updateNote,
   deleteNote,
+  restoreNote,
+  purgeNote,
+  listTrashedNotes,
   searchBoardsByTitle,
 };

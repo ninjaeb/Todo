@@ -240,6 +240,47 @@ button:hover { filter: brightness(1.1); }
   color: var(--danger);
 }
 
+.trash-list {
+  list-style: none;
+  margin: 16px 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.trash-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 8px 8px 14px;
+}
+.trash-list .trash-item-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.trash-list button {
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.trash-list button.restore-note:hover {
+  color: var(--accent-strong);
+}
+.trash-list button.purge-note:hover {
+  color: var(--danger);
+}
+
 /* ---------- Board page ---------- */
 .topbar {
   display: flex;
@@ -430,17 +471,21 @@ button:hover { filter: brightness(1.1); }
   color: var(--text);
 }
 
-.add-item-form { display: flex; }
+.add-item-form { display: flex; margin-top: 4px; }
 .add-item-input {
   width: 100%;
-  background: transparent;
-  border: none;
-  border-top: 1px dashed transparent;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
   color: var(--text-dim);
   font-size: 17px;
-  padding: 10px 2px;
+  padding: 10px 12px;
 }
-.add-item-input:focus { outline: none; color: var(--text); }
+.add-item-input:focus {
+  outline: none;
+  color: var(--text);
+  border-color: var(--accent);
+}
 
 .completed-toggle {
   display: flex;
