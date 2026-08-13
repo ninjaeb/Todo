@@ -452,7 +452,7 @@ button:hover { filter: brightness(1.1); }
   background: transparent;
   cursor: pointer;
 }
-.priority-btn[data-priority="low"] { background: #4a90d9; border-color: #4a90d9; }
+.priority-btn[data-priority="low"] { background: #34a853; border-color: #34a853; }
 .priority-btn[data-priority="medium"] { background: #f5a623; border-color: #f5a623; }
 .priority-btn[data-priority="high"] { background: #e0483e; border-color: #e0483e; }
 
