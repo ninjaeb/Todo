@@ -441,6 +441,21 @@ button:hover { filter: brightness(1.1); }
   accent-color: var(--accent-strong);
 }
 
+.priority-btn {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 8px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+}
+.priority-btn[data-priority="low"] { background: #4a90d9; border-color: #4a90d9; }
+.priority-btn[data-priority="medium"] { background: #f5a623; border-color: #f5a623; }
+.priority-btn[data-priority="high"] { background: #e0483e; border-color: #e0483e; }
+
 .note-item .item-text {
   flex: 1;
   min-width: 0;

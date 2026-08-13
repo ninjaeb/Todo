@@ -98,6 +98,7 @@ app.use(
 );
 
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
+const PRIORITIES = ['low', 'medium', 'high'];
 
 function asyncRoute(handler) {
   return (req, res, next) => handler(req, res, next).catch(next);
@@ -217,6 +218,7 @@ app.put(
         id: it.id || nanoid(8),
         text: typeof it.text === 'string' ? it.text : '',
         checked: !!it.checked,
+        priority: PRIORITIES.includes(it.priority) ? it.priority : null,
       }));
     }
 

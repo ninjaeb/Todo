@@ -1,5 +1,17 @@
 const COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink'];
 
+const PRIORITY_CYCLE = [null, 'low', 'medium', 'high'];
+function nextPriority(current) {
+  const idx = PRIORITY_CYCLE.indexOf(current || null);
+  return PRIORITY_CYCLE[(idx + 1) % PRIORITY_CYCLE.length];
+}
+function priorityRank(priority) {
+  return { high: 3, medium: 2, low: 1 }[priority] || 0;
+}
+function priorityLabel(priority) {
+  return priority ? `Priority: ${priority[0].toUpperCase()}${priority.slice(1)} — click to change` : 'No priority — click to set';
+}
+
 // Path is either /board/:boardId or /board/:boardId/note/:noteId (a note's
 // own shareable link — opens the board with that note's detail view up).
 const pathSegments = window.location.pathname.split('/').filter(Boolean);
@@ -118,6 +130,7 @@ function mergeNote(incoming) {
       if (existingItem.id !== focusedItemId) {
         existingItem.text = incomingItem.text;
         existingItem.checked = incomingItem.checked;
+        existingItem.priority = incomingItem.priority;
       }
       return existingItem;
     }
@@ -147,12 +160,15 @@ function syncItemsContainer(container, items, note, el) {
 
     const checkbox = row.querySelector('input[type="checkbox"]');
     const textarea = row.querySelector('.item-text');
+    const priorityBtn = row.querySelector('.priority-btn');
     if (document.activeElement !== checkbox) checkbox.checked = !!item.checked;
     row.classList.toggle('checked', !!item.checked);
     if (document.activeElement !== textarea && textarea.value !== text) {
       textarea.value = text;
       autosizeTextarea(textarea);
     }
+    priorityBtn.dataset.priority = item.priority || 'none';
+    priorityBtn.title = priorityLabel(item.priority);
     container.appendChild(row); // reorders without losing focus/state
   });
 
@@ -380,6 +396,17 @@ function buildItemRow(note, item, el) {
     putNote(note.id, { items: note.items });
   });
 
+  const priorityBtn = document.createElement('button');
+  priorityBtn.type = 'button';
+  priorityBtn.className = 'priority-btn';
+  priorityBtn.dataset.priority = item.priority || 'none';
+  priorityBtn.title = priorityLabel(item.priority);
+  priorityBtn.addEventListener('click', () => {
+    item.priority = nextPriority(item.priority);
+    updateNoteElement(el, note);
+    putNote(note.id, { items: note.items });
+  });
+
   const text = document.createElement('textarea');
   text.rows = 1;
   text.className = 'item-text';
@@ -405,7 +432,7 @@ function buildItemRow(note, item, el) {
     putNote(note.id, { items: note.items });
   });
 
-  row.append(handle, checkbox, text, removeBtn);
+  row.append(handle, checkbox, priorityBtn, text, removeBtn);
   return row;
 }
 
@@ -427,7 +454,14 @@ function updateNoteElement(el, note) {
   const completedContainer = el.querySelector('.completed-items');
   const completedToggle = el.querySelector('.completed-toggle');
 
-  const activeItems = note.items.filter((item) => !item.checked);
+  // Higher-priority open items float to the top automatically; items of
+  // equal priority (including no priority) keep their existing relative
+  // order, so manual drag-to-reorder still works within a priority tier.
+  const activeItems = note.items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => !item.checked)
+    .sort((a, b) => priorityRank(b.item.priority) - priorityRank(a.item.priority) || a.index - b.index)
+    .map(({ item }) => item);
   const completedItems = note.items.filter((item) => item.checked);
   const expanded = el.dataset.completedExpanded === 'true';
 
